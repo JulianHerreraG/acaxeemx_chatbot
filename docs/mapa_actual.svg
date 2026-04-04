@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="620" viewBox="0 0 900 620" font-family="Segoe UI, Arial, sans-serif">
+
+  <!-- Fondo -->
+  <rect width="900" height="620" fill="#0d1117" rx="16"/>
+
+  <!-- Título -->
+  <text x="450" y="44" text-anchor="middle" fill="#e6c97a" font-size="22" font-weight="bold">ACAXEE — Infraestructura Actual</text>
+  <text x="450" y="68" text-anchor="middle" fill="#8b9099" font-size="13">SKY TROPIC DINING · BucksandBrainsAI</text>
+
+  <!-- ─── CAPA CANAL ─── -->
+  <rect x="340" y="90" width="220" height="54" rx="10" fill="#1c2333" stroke="#4a90d9" stroke-width="2"/>
+  <text x="450" y="112" text-anchor="middle" fill="#4a90d9" font-size="11" font-weight="bold">CANAL</text>
+  <text x="450" y="132" text-anchor="middle" fill="#cdd6e0" font-size="14" font-weight="bold">Telegram</text>
+
+  <!-- flecha canal → orquestador -->
+  <line x1="450" y1="144" x2="450" y2="178" stroke="#4a90d9" stroke-width="2" marker-end="url(#arr-blue)"/>
+
+  <!-- ─── CAPA ORQUESTADOR ─── -->
+  <rect x="220" y="178" width="460" height="80" rx="10" fill="#1c2333" stroke="#e6c97a" stroke-width="2"/>
+  <text x="450" y="200" text-anchor="middle" fill="#e6c97a" font-size="11" font-weight="bold">AGENTE CONVERSACIONAL</text>
+  <text x="450" y="222" text-anchor="middle" fill="#cdd6e0" font-size="13">Orquestador · Parser JSON · Historial</text>
+  <text x="450" y="244" text-anchor="middle" fill="#8b9099" font-size="12">Python · Render · GitHub CI/CD</text>
+
+  <!-- flecha orquestador → LLM (derecha) -->
+  <line x1="680" y1="218" x2="760" y2="218" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-purple)"/>
+  <!-- flecha LLM → orquestador (retorno, curva) -->
+  <line x1="760" y1="232" x2="680" y2="232" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-purple-d)"/>
+
+  <!-- ─── LLM ─── -->
+  <rect x="760" y="192" width="118" height="60" rx="10" fill="#1c2333" stroke="#a78bfa" stroke-width="2"/>
+  <text x="819" y="215" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="bold">LLM / IA</text>
+  <text x="819" y="233" text-anchor="middle" fill="#cdd6e0" font-size="11">GitHub</text>
+  <text x="819" y="248" text-anchor="middle" fill="#cdd6e0" font-size="11">Models</text>
+
+  <!-- flecha orquestador → servicios -->
+  <line x1="450" y1="258" x2="450" y2="292" stroke="#e6c97a" stroke-width="2" marker-end="url(#arr-gold)"/>
+
+  <!-- ─── CAPA SERVICIOS ─── -->
+  <rect x="100" y="292" width="700" height="54" rx="10" fill="#1c2333" stroke="#50c878" stroke-width="2"/>
+  <text x="450" y="314" text-anchor="middle" fill="#50c878" font-size="11" font-weight="bold">SERVICIOS OPERATIVOS</text>
+  <text x="450" y="334" text-anchor="middle" fill="#cdd6e0" font-size="13">Reservar · Cancelar · Modificar · Consultar Disponibilidad</text>
+
+  <!-- flecha servicios → firebase -->
+  <line x1="450" y1="346" x2="450" y2="380" stroke="#50c878" stroke-width="2" marker-end="url(#arr-green)"/>
+
+  <!-- ─── FIREBASE ─── -->
+  <rect x="180" y="380" width="540" height="100" rx="10" fill="#1c2333" stroke="#f4845f" stroke-width="2"/>
+  <text x="450" y="402" text-anchor="middle" fill="#f4845f" font-size="11" font-weight="bold">FIREBASE REALTIME DATABASE</text>
+  <!-- 4 nodos internos -->
+  <rect x="198" y="414" width="118" height="52" rx="7" fill="#131920" stroke="#f4845f" stroke-width="1"/>
+  <text x="257" y="434" text-anchor="middle" fill="#cdd6e0" font-size="11" font-weight="bold">Conversaciones</text>
+  <text x="257" y="452" text-anchor="middle" fill="#8b9099" font-size="10">Historial del día</text>
+  <text x="257" y="462" text-anchor="middle" fill="#8b9099" font-size="9">Limpieza 3AM</text>
+
+  <rect x="330" y="414" width="118" height="52" rx="7" fill="#131920" stroke="#f4845f" stroke-width="1"/>
+  <text x="389" y="434" text-anchor="middle" fill="#cdd6e0" font-size="11" font-weight="bold">Reservaciones</text>
+  <text x="389" y="452" text-anchor="middle" fill="#8b9099" font-size="10">Persistentes</text>
+  <text x="389" y="462" text-anchor="middle" fill="#8b9099" font-size="9">por fecha</text>
+
+  <rect x="462" y="414" width="118" height="52" rx="7" fill="#131920" stroke="#f4845f" stroke-width="1"/>
+  <text x="521" y="434" text-anchor="middle" fill="#cdd6e0" font-size="11" font-weight="bold">Restaurante</text>
+  <text x="521" y="452" text-anchor="middle" fill="#8b9099" font-size="10">Config y datos</text>
+  <text x="521" y="462" text-anchor="middle" fill="#8b9099" font-size="9">del negocio</text>
+
+  <rect x="594" y="414" width="118" height="52" rx="7" fill="#131920" stroke="#f4845f" stroke-width="1"/>
+  <text x="653" y="434" text-anchor="middle" fill="#cdd6e0" font-size="11" font-weight="bold">Clientes</text>
+  <text x="653" y="452" text-anchor="middle" fill="#8b9099" font-size="10">Recurrentes</text>
+  <text x="653" y="462" text-anchor="middle" fill="#8b9099" font-size="9">nombre · tel</text>
+
+  <!-- ─── CAPACIDADES GRID ─── -->
+  <text x="450" y="514" text-anchor="middle" fill="#8b9099" font-size="11">── Capacidades operativas ──</text>
+
+  <!-- Fila de badges -->
+  <rect x="52" y="524" width="140" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="122" y="543" text-anchor="middle" fill="#50c878" font-size="11">✓ Reservar mesa</text>
+
+  <rect x="204" y="524" width="152" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="280" y="543" text-anchor="middle" fill="#50c878" font-size="11">✓ Cancelar / Modificar</text>
+
+  <rect x="368" y="524" width="166" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="451" y="543" text-anchor="middle" fill="#50c878" font-size="11">✓ Disponibilidad + slots</text>
+
+  <rect x="546" y="524" width="148" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="620" y="543" text-anchor="middle" fill="#50c878" font-size="11">✓ Alta disponibilidad</text>
+
+  <rect x="706" y="524" width="148" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="780" y="543" text-anchor="middle" fill="#50c878" font-size="11">✓ Despliegue continuo</text>
+
+  <rect x="204" y="560" width="152" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="280" y="579" text-anchor="middle" fill="#50c878" font-size="11">✓ Aviso alimentario</text>
+
+  <rect x="368" y="560" width="166" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="451" y="579" text-anchor="middle" fill="#50c878" font-size="11">✓ Horario validado</text>
+
+  <rect x="546" y="560" width="148" height="28" rx="6" fill="#1a2a1a" stroke="#50c878" stroke-width="1"/>
+  <text x="620" y="579" text-anchor="middle" fill="#50c878" font-size="11">✓ Instancia única</text>
+
+  <!-- ─── MARCADORES DE FLECHA ─── -->
+  <defs>
+    <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#4a90d9"/>
+    </marker>
+    <marker id="arr-gold" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#e6c97a"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#50c878"/>
+    </marker>
+    <marker id="arr-purple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa"/>
+    </marker>
+    <marker id="arr-purple-d" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa"/>
+    </marker>
+  </defs>
+
+</svg>
