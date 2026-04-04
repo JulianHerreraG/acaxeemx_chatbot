@@ -30,6 +30,21 @@ class ConsultarDisponibilidad(BaseModel):
     hora: Optional[str] = None
 
 
+class ModificarReserva(BaseModel):
+    estado: bool = False
+    # Datos de la reserva original a cancelar
+    nombre_original: Optional[str] = None
+    telefono_original: Optional[str] = None
+    fecha_original: Optional[str] = None   # Requerido solo si hay varias reservas
+    hora_original: Optional[str] = None    # Requerido solo si hay varias reservas
+    # Datos de la nueva reserva (opcionales hasta que se cancele la anterior)
+    nombre_nuevo: Optional[str] = None
+    numero_personas_nuevo: Optional[int] = None
+    telefono_nuevo: Optional[str] = None
+    fecha_nueva: Optional[str] = None
+    hora_nueva: Optional[str] = None
+
+
 class MensajeRespuestaDirecto(BaseModel):
     estado: bool = False
     mensaje: Optional[str] = None
@@ -40,6 +55,7 @@ class ActionResponse(BaseModel):
     reserva: Reserva = Reserva()
     cancelar_reserva: CancelarReserva = CancelarReserva()
     consultar_disponibilidad: ConsultarDisponibilidad = ConsultarDisponibilidad()
+    modificar_reserva: ModificarReserva = ModificarReserva()
     mensaje_respuesta_directo: MensajeRespuestaDirecto = MensajeRespuestaDirecto()
 
     @model_validator(mode="after")
@@ -64,5 +80,10 @@ class ActionResponse(BaseModel):
                 if getattr(self.consultar_disponibilidad, field) is None:
                     self.consultar_disponibilidad.estado = False
                     break
+
+        # modificar_reserva se activa con nombre_original + telefono_original
+        if self.modificar_reserva.estado:
+            if not self.modificar_reserva.nombre_original or not self.modificar_reserva.telefono_original:
+                self.modificar_reserva.estado = False
 
         return self

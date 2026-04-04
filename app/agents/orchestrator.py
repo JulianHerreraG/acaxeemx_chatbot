@@ -8,6 +8,7 @@ from app.repositories.conversation_repo import conversation_repo
 from app.services.reservation_service import reservation_service
 from app.services.cancellation_service import cancellation_service
 from app.services.availability_service import availability_service
+from app.services.modification_service import modification_service
 
 logger = setup_logger("orchestrator")
 
@@ -77,6 +78,10 @@ class Orchestrator:
         elif action_response.consultar_disponibilidad.estado:
             logger.info("Ejecutando: consultar disponibilidad")
             action_result = availability_service.check_availability(action_response.consultar_disponibilidad)
+
+        elif action_response.modificar_reserva.estado:
+            logger.info("Ejecutando: modificar reserva")
+            action_result = modification_service.modify_reservation(action_response.modificar_reserva)
 
         # Paso 8: Si se ejecuto una accion, segunda pasada al LLM
         if action_result is not None:

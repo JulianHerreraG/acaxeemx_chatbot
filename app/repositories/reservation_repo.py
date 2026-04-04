@@ -18,6 +18,7 @@ class ReservationRepo:
         return new_ref.key
 
     def find_by_criteria(self, fecha: str, hora: str, nombre: str, telefono: str):
+        """Busca una reserva exacta por fecha, hora, nombre y telefono."""
         ref = get_db_reference(f"/reservaciones/{fecha}")
         data = ref.get()
 
@@ -34,6 +35,59 @@ class ReservationRepo:
 
         return None
 
+    def find_by_name_and_phone(self, nombre: str, telefono: str, from_date: str) -> list:
+        """
+        Busca todas las reservas futuras (>= from_date) con ese nombre y telefono.
+        Retorna lista de (fecha, key, reservation_data).
+        """
+        ref = get_db_reference("/reservaciones")
+        all_dates = ref.get()
+
+        if not all_dates:
+            return []
+
+        results = []
+        for fecha, reservations in all_dates.items():
+            if fecha < from_date:
+                continue
+            if not isinstance(reservations, dict):
+                continue
+            for key, value in reservations.items():
+                if (
+                    value.get("nombre", "").lower() == nombre.lower()
+                    and value.get("telefono") == telefono
+                ):
+                    results.append((fecha, key, value))
+
+        # Ordenar por fecha y hora
+        results.sort(key=lambda x: (x[0], x[2].get("hora", "")))
+        return results
+
+    def get_available_slots_for_date(self, fecha: str) -> list[str]:
+        """
+        Retorna los horarios disponibles (HH:00) para una fecha dada,
+        entre OPEN_HOUR y LAST_RESERVATION_HOUR.
+        """
+        from app.utils.config import Config
+
+        ref = get_db_reference(f"/reservaciones/{fecha}")
+        data = ref.get() or {}
+
+        # Contar reservas por hora
+        counts: dict[str, int] = {}
+        for key, value in data.items():
+            hora = value.get("hora", "")
+            counts[hora] = counts.get(hora, 0) + 1
+
+        # Encontrar slots disponibles
+        available = []
+        for hour in range(Config.RESTAURANT_OPEN_HOUR, Config.RESTAURANT_LAST_RESERVATION_HOUR + 1):
+            hora_str = f"{hour:02d}:00"
+            if counts.get(hora_str, 0) < Config.MAX_RESERVATIONS_PER_HOUR:
+                available.append(hora_str)
+
+        return available
+
     def delete(self, fecha: str, key: str):
         ref = get_db_reference(f"/reservaciones/{fecha}/{key}")
         ref.delete()
@@ -46,12 +100,7 @@ class ReservationRepo:
         if not data:
             return 0
 
-        count = 0
-        for key, value in data.items():
-            if value.get("hora") == hora:
-                count += 1
-
-        return count
+        return sum(1 for v in data.values() if v.get("hora") == hora)
 
     def get_all_for_date(self, fecha: str) -> dict:
         ref = get_db_reference(f"/reservaciones/{fecha}")
