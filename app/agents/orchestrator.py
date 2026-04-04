@@ -43,6 +43,12 @@ class Orchestrator:
         messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
+        # Logging del contexto completo (descomenta para debug)
+        # logger.info(f"=== CONTEXTO COMPLETO DEL LLM ===")
+        # for i, msg in enumerate(messages):
+        #     preview = msg["content"][:100] + "..." if len(msg["content"]) > 100 else msg["content"]
+        #     logger.info(f"[{i}] {msg['role']}: {preview}")
+
         # Paso 4: Primera pasada - llamar al LLM
         raw_response = self._call_llm_with_retry(messages)
         if raw_response is None:
