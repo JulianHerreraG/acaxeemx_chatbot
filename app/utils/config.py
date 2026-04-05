@@ -10,9 +10,12 @@ class Config:
     TELEGRAM_API_KEY = os.environ["TELEGRAM_API_KEY"]
     FIREBASE_DATABASE_URL = os.environ["FIREBASE_DATABASE_URL"]
 
+    # Opcional (fallback LLM)
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
     # Con defaults
     FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_conection.json")
-    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-6")
     LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://models.inference.ai.azure.com")
     RESTAURANT_NAME = os.getenv("RESTAURANT_NAME", "Acaxeemx")
     TIMEZONE = os.getenv("TIMEZONE", "America/Mazatlan")
