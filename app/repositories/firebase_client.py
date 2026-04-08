@@ -1,3 +1,4 @@
+import json
 import firebase_admin
 from firebase_admin import credentials, db
 from app.utils.config import Config
@@ -12,7 +13,8 @@ def init_firebase():
     global _initialized
     if _initialized:
         return
-    cred = credentials.Certificate(Config.FIREBASE_CREDENTIALS_PATH)
+    cred_dict = json.loads(Config.FIREBASE_CREDENTIALS_JSON)
+    cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred, {
         "databaseURL": Config.FIREBASE_DATABASE_URL,
     })

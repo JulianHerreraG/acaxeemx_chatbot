@@ -13,8 +13,8 @@ class Config:
     # Opcional (fallback LLM)
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-    # Con defaults
-    FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_conection.json")
+    # Firebase credentials (JSON completo como string en variable de entorno)
+    FIREBASE_CREDENTIALS_JSON = os.environ["FIREBASE_CREDENTIALS_JSON"]
     LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-6")
     LLM_AUX_MODEL = os.getenv("LLM_AUX_MODEL", "gpt-4o-mini")
     LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://models.inference.ai.azure.com")
