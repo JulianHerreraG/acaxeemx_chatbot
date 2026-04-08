@@ -5,6 +5,12 @@ from app.utils.logger import setup_logger
 logger = setup_logger("reservation_repo")
 
 
+def _hora_to_minutes(hora_str: str) -> int:
+    """'HH:MM' → minutos desde medianoche. Solo formato 24h."""
+    parts = hora_str.split(":")
+    return int(parts[0]) * 60 + int(parts[1])
+
+
 class ReservationRepo:
     def create(self, reservation_data: dict) -> str:
         fecha = reservation_data["fecha"]
@@ -21,10 +27,8 @@ class ReservationRepo:
         """Busca una reserva exacta por fecha, hora, nombre y telefono."""
         ref = get_db_reference(f"/reservaciones/{fecha}")
         data = ref.get()
-
         if not data:
             return None
-
         for key, value in data.items():
             if (
                 value.get("hora") == hora
@@ -32,7 +36,6 @@ class ReservationRepo:
                 and value.get("telefono") == telefono
             ):
                 return key, value
-
         return None
 
     def find_by_name_and_phone(self, nombre: str, telefono: str, from_date: str) -> list:
@@ -42,10 +45,8 @@ class ReservationRepo:
         """
         ref = get_db_reference("/reservaciones")
         all_dates = ref.get()
-
         if not all_dates:
             return []
-
         results = []
         for fecha, reservations in all_dates.items():
             if fecha < from_date:
@@ -58,49 +59,62 @@ class ReservationRepo:
                     and value.get("telefono") == telefono
                 ):
                     results.append((fecha, key, value))
-
-        # Ordenar por fecha y hora
         results.sort(key=lambda x: (x[0], x[2].get("hora", "")))
         return results
 
-    def get_available_slots_for_date(self, fecha: str) -> list[str]:
+    def get_occupied_tables_at_time(
+        self, fecha: str, hora_str: str, min_stay_minutes: int
+    ) -> set[str]:
         """
-        Retorna los horarios disponibles (HH:00) para una fecha dada,
-        entre OPEN_HOUR y LAST_RESERVATION_HOUR.
+        Retorna IDs de mesas bloqueadas en `hora_str` considerando la ventana
+        de ocupación: una mesa queda bloqueada si tiene una reserva en el rango
+        (hora_str - min_stay_minutes, hora_str + min_stay_minutes), extremos excluidos.
         """
-        from app.utils.config import Config
+        data = self.get_all_for_date(fecha)
+        new_time = _hora_to_minutes(hora_str)
+        occupied = set()
+        for key, value in data.items():
+            existing_hora = value.get("hora", "")
+            mesa = value.get("mesa")
+            if not existing_hora or not mesa:
+                continue
+            existing_time = _hora_to_minutes(existing_hora)
+            if abs(new_time - existing_time) < min_stay_minutes:
+                occupied.add(str(mesa))
+        return occupied
 
-        ref = get_db_reference(f"/reservaciones/{fecha}")
-        data = ref.get() or {}
+    def get_all_occupied_tables_windowed(
+        self, fecha: str, hour_slots: list[str], min_stay_minutes: int
+    ) -> dict[str, set[str]]:
+        """
+        Una sola lectura a Firebase, luego calcula las mesas bloqueadas por
+        ventana para cada slot. Retorna {hora_slot: set(mesa_ids)}.
+        """
+        data = self.get_all_for_date(fecha)
 
-        # Contar reservas por hora
-        counts: dict[str, int] = {}
+        # Extraer (tiempo_minutos, mesa_id) de todas las reservas
+        existing: list[tuple[int, str]] = []
         for key, value in data.items():
             hora = value.get("hora", "")
-            counts[hora] = counts.get(hora, 0) + 1
+            mesa = value.get("mesa")
+            if hora and mesa:
+                existing.append((_hora_to_minutes(hora), str(mesa)))
 
-        # Encontrar slots disponibles
-        available = []
-        for hour in range(Config.RESTAURANT_OPEN_HOUR, Config.RESTAURANT_LAST_RESERVATION_HOUR + 1):
-            hora_str = f"{hour:02d}:00"
-            if counts.get(hora_str, 0) < Config.MAX_RESERVATIONS_PER_HOUR:
-                available.append(hora_str)
+        result: dict[str, set[str]] = {}
+        for hora_slot in hour_slots:
+            slot_time = _hora_to_minutes(hora_slot)
+            blocked = set()
+            for existing_time, mesa_id in existing:
+                if abs(slot_time - existing_time) < min_stay_minutes:
+                    blocked.add(mesa_id)
+            result[hora_slot] = blocked
 
-        return available
+        return result
 
     def delete(self, fecha: str, key: str):
         ref = get_db_reference(f"/reservaciones/{fecha}/{key}")
         ref.delete()
         logger.info(f"Reservacion eliminada: {key} de {fecha}")
-
-    def count_by_hour(self, fecha: str, hora: str) -> int:
-        ref = get_db_reference(f"/reservaciones/{fecha}")
-        data = ref.get()
-
-        if not data:
-            return 0
-
-        return sum(1 for v in data.values() if v.get("hora") == hora)
 
     def get_all_for_date(self, fecha: str) -> dict:
         ref = get_db_reference(f"/reservaciones/{fecha}")

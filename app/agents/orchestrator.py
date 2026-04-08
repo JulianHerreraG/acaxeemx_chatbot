@@ -1,7 +1,7 @@
 from app.clients.llm_client import LLMClient
 from app.prompts.system_prompt import SYSTEM_PROMPT
 from app.utils.datetime_helper import get_current_datetime
-from app.utils.json_parser import parse_llm_response
+from app.utils.json_parser import parse_llm_response, extract_json
 from app.utils.config import Config
 from app.utils.logger import setup_logger
 from app.repositories.conversation_repo import conversation_repo
@@ -12,7 +12,7 @@ from app.services.modification_service import modification_service
 
 logger = setup_logger("orchestrator")
 
-FALLBACK_MESSAGE = "Lo siento, ocurrió un error procesando tu mensaje. Por favor intenta de nuevo."
+FALLBACK_MESSAGE = "Lo siento, ocurrio un error procesando tu mensaje. Por favor intenta de nuevo."
 
 
 class Orchestrator:
@@ -34,7 +34,14 @@ class Orchestrator:
         # Paso 2: Cargar historial de conversacion
         history = conversation_repo.get_history(chat_id)
 
-        # Paso 3: Construir mensajes para el LLM
+        # Paso 3: Verificar si es mensaje de cierre post-confirmacion
+        closure_response = self._try_closure(user_message, history)
+        if closure_response:
+            conversation_repo.save_turn(chat_id, "user", user_message)
+            conversation_repo.save_turn(chat_id, "assistant", closure_response)
+            return closure_response
+
+        # Paso 4: Construir mensajes para el LLM principal
         system_msg = SYSTEM_PROMPT.format(
             restaurant_name=Config.RESTAURANT_NAME,
             hora_actual=datetime_info["Hora"],
@@ -44,27 +51,21 @@ class Orchestrator:
         messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
-        # Logging del contexto completo (descomenta para debug)
-        # logger.info(f"=== CONTEXTO COMPLETO DEL LLM ===")
-        # for i, msg in enumerate(messages):
-        #     preview = msg["content"][:100] + "..." if len(msg["content"]) > 100 else msg["content"]
-        #     logger.info(f"[{i}] {msg['role']}: {preview}")
-
-        # Paso 4: Primera pasada - llamar al LLM
+        # Paso 5: Primera pasada - llamar al LLM
         raw_response = self._call_llm_with_retry(messages)
         if raw_response is None:
             return FALLBACK_MESSAGE
 
-        # Paso 5: Parsear y validar JSON
+        # Paso 6: Parsear y validar JSON
         action_response = self._parse_with_retry(raw_response, messages)
         if action_response is None:
             return FALLBACK_MESSAGE
 
-        # Paso 6: Sobreescribir fecha_hora_actual con valores del sistema
+        # Paso 7: Sobreescribir fecha_hora_actual con valores del sistema
         action_response.fecha_hora_actual.Hora = datetime_info["Hora"]
         action_response.fecha_hora_actual.fecha = datetime_info["fecha"]
 
-        # Paso 7: Determinar y ejecutar accion
+        # Paso 8: Determinar y ejecutar accion
         action_result = None
 
         if action_response.reserva.estado:
@@ -83,30 +84,146 @@ class Orchestrator:
             logger.info("Ejecutando: modificar reserva")
             action_result = modification_service.modify_reservation(action_response.modificar_reserva)
 
-        # Paso 8: Si se ejecuto una accion, segunda pasada al LLM
+        # Paso 9: Determinar respuesta final
         if action_result is not None:
-            final_message = self._second_pass(messages, raw_response, action_result)
+            final_message = self._resolve_action_result(
+                action_result, action_response, messages, raw_response,
+            )
         else:
-            # Respuesta directa
+            # Respuesta directa (sin accion)
             final_message = action_response.mensaje_respuesta_directo.mensaje
             if not final_message:
-                final_message = "¿En qué puedo ayudarte?"
+                # El LLM genero un JSON sin accion ejecutable y sin mensaje:
+                # probablemente intento activar una accion con datos incompletos
+                # y apago mensaje_respuesta_directo por la Regla 5. Recuperar.
+                logger.warning("JSON sin accion ni mensaje — ejecutando llamada de recuperacion")
+                final_message = self._recovery_pass(messages, raw_response)
 
-        # Paso 9: Guardar turno en historial
+        # Paso 10: Guardar turno en historial
         conversation_repo.save_turn(chat_id, "user", user_message)
         conversation_repo.save_turn(chat_id, "assistant", final_message)
 
         logger.info(f"Respuesta para {chat_id}: {final_message[:50]}...")
         return final_message
 
+    def _resolve_action_result(
+        self, result: dict, action_response, messages: list, raw_response: str
+    ) -> str:
+        """
+        Si la accion fue exitosa y hay mensaje_si_exitoso, usa ese mensaje
+        directamente sin Call 2. Si fallo, hace segunda pasada al LLM.
+        Para consultar_disponibilidad, siempre devuelve resultado directo.
+        """
+        # consultar_disponibilidad: respuesta directa de Python siempre
+        if action_response.consultar_disponibilidad.estado:
+            logger.info("Disponibilidad: respuesta directa sin Call 2")
+            return result["mensaje"]
+
+        is_success = result.get("exito", False)
+
+        if is_success:
+            # Buscar mensaje_si_exitoso en la accion activa
+            pre_message = None
+            if action_response.reserva.estado:
+                pre_message = action_response.reserva.mensaje_si_exitoso
+            elif action_response.cancelar_reserva.estado:
+                pre_message = action_response.cancelar_reserva.mensaje_si_exitoso
+            elif action_response.modificar_reserva.estado:
+                pre_message = action_response.modificar_reserva.mensaje_si_exitoso
+
+            if pre_message:
+                logger.info("Accion exitosa: usando mensaje_si_exitoso (sin Call 2)")
+                return pre_message
+
+        # Fallback: segunda pasada al LLM (accion fallo o no habia mensaje anticipado)
+        logger.info("Ejecutando segunda pasada al LLM")
+        return self._second_pass(messages, raw_response, result["mensaje"])
+
+    def _try_closure(self, user_message: str, history: list[dict]) -> str | None:
+        """
+        Detecta si el mensaje es un cierre/agradecimiento tras confirmacion.
+        Usa el modelo auxiliar ligero. Retorna el mensaje de cierre o None.
+        """
+        if not history:
+            return None
+
+        # Verificar que el ultimo mensaje del bot contenga confirmacion exitosa
+        last_bot_msg = None
+        for msg in reversed(history):
+            if msg["role"] == "assistant":
+                last_bot_msg = msg["content"]
+                break
+
+        if not last_bot_msg:
+            return None
+
+        # Indicadores de que el ultimo mensaje fue una confirmacion de accion
+        confirmation_markers = [
+            "confirmada", "cancelada exitosamente", "creada exitosamente",
+            "Nueva reservacion confirmada",
+        ]
+        is_post_confirmation = any(marker in last_bot_msg for marker in confirmation_markers)
+        if not is_post_confirmation:
+            return None
+
+        # Llamar al modelo auxiliar
+        try:
+            aux_response = self.llm_client.call_auxiliary(
+                user_message=user_message,
+                context_history=history,
+            )
+            parsed = extract_json(aux_response)
+            if parsed.get("tipo") == "cierre":
+                logger.info("Modelo auxiliar: detectado cierre, sin Call principal")
+                return parsed.get("mensaje", "¡Gracias! Te esperamos en ACAXEEMX.")
+            logger.info("Modelo auxiliar: detectada nueva accion, delegando al principal")
+            return None
+        except Exception as e:
+            logger.warning(f"Error en modelo auxiliar, delegando al principal: {e}")
+            return None
+
+    def _recovery_pass(self, messages: list, raw_response: str) -> str:
+        """
+        Llamada de recuperación cuando el JSON no tiene accion ejecutable ni mensaje.
+        Ocurre cuando el LLM activo una accion con datos incompletos (el validator la
+        descarto) y además apagó mensaje_respuesta_directo por la Regla 5.
+        Le pedimos que genere una respuesta conversacional pidiendo los datos faltantes.
+        """
+        recovery_messages = list(messages)
+        recovery_messages.append({"role": "assistant", "content": raw_response})
+        recovery_messages.append({
+            "role": "user",
+            "content": (
+                "Tu respuesta anterior no pudo procesarse: intentaste activar una accion "
+                "pero faltaban datos requeridos, y además apagaste 'mensaje_respuesta_directo'. "
+                "Genera una nueva respuesta donde TODAS las acciones operativas tengan "
+                "estado=false, y 'mensaje_respuesta_directo' tenga estado=true con un "
+                "mensaje amable pidiendo los datos que faltan para completar la solicitud."
+            ),
+        })
+
+        raw_recovery = self._call_llm_with_retry(recovery_messages)
+        if raw_recovery is None:
+            return FALLBACK_MESSAGE
+
+        try:
+            parsed = parse_llm_response(raw_recovery)
+            msg = parsed.mensaje_respuesta_directo.mensaje
+            if msg:
+                logger.info("Recovery pass exitoso")
+                return msg
+        except Exception as e:
+            logger.warning(f"Error parseando recovery pass: {e}")
+
+        return FALLBACK_MESSAGE
+
     def _second_pass(self, messages: list, raw_response: str, action_result: str) -> str:
-        # Agregar la respuesta del modelo y el resultado de la accion
         messages.append({"role": "assistant", "content": raw_response})
         messages.append({"role": "user", "content": f"RESULTADO DE ACCION: {action_result}"})
 
         raw_response_2 = self._call_llm_with_retry(messages)
         if raw_response_2 is None:
-            return action_result  # Devolver el resultado crudo como fallback
+            return action_result
 
         action_response_2 = self._parse_with_retry(raw_response_2, messages)
         if action_response_2 is None:

@@ -14,6 +14,7 @@ class Reserva(BaseModel):
     telefono: Optional[str] = None
     fecha: Optional[str] = None
     hora: Optional[str] = None
+    mensaje_si_exitoso: Optional[str] = None
 
 
 class CancelarReserva(BaseModel):
@@ -22,12 +23,14 @@ class CancelarReserva(BaseModel):
     telefono: Optional[str] = None
     fecha: Optional[str] = None
     hora: Optional[str] = None
+    mensaje_si_exitoso: Optional[str] = None
 
 
 class ConsultarDisponibilidad(BaseModel):
     estado: bool = False
     fecha: Optional[str] = None
     hora: Optional[str] = None
+    numero_personas: Optional[int] = None
 
 
 class ModificarReserva(BaseModel):
@@ -35,14 +38,15 @@ class ModificarReserva(BaseModel):
     # Datos de la reserva original a cancelar
     nombre_original: Optional[str] = None
     telefono_original: Optional[str] = None
-    fecha_original: Optional[str] = None   # Requerido solo si hay varias reservas
-    hora_original: Optional[str] = None    # Requerido solo si hay varias reservas
-    # Datos de la nueva reserva (opcionales hasta que se cancele la anterior)
+    fecha_original: Optional[str] = None
+    hora_original: Optional[str] = None
+    # Datos de la nueva reserva
     nombre_nuevo: Optional[str] = None
     numero_personas_nuevo: Optional[int] = None
     telefono_nuevo: Optional[str] = None
     fecha_nueva: Optional[str] = None
     hora_nueva: Optional[str] = None
+    mensaje_si_exitoso: Optional[str] = None
 
 
 class MensajeRespuestaDirecto(BaseModel):
@@ -75,11 +79,9 @@ class ActionResponse(BaseModel):
                     break
 
         if self.consultar_disponibilidad.estado:
-            required = ["fecha", "hora"]
-            for field in required:
-                if getattr(self.consultar_disponibilidad, field) is None:
-                    self.consultar_disponibilidad.estado = False
-                    break
+            # Solo fecha es requerida; hora y numero_personas son opcionales
+            if not self.consultar_disponibilidad.fecha:
+                self.consultar_disponibilidad.estado = False
 
         # modificar_reserva se activa con nombre_original + telefono_original
         if self.modificar_reserva.estado:

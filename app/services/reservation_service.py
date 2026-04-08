@@ -1,54 +1,116 @@
 from app.schemas.action_schema import Reserva
 from app.repositories.reservation_repo import reservation_repo
-from app.utils.config import Config
+from app.services.table_assignment_service import table_assignment_service
 from app.utils.datetime_helper import is_valid_reservation_hour
 from app.utils.logger import setup_logger
 
 logger = setup_logger("reservation_service")
 
 HORARIO_MSG = (
-    f"ACAXEEMX atiende de Lunes a Domingo de 2:00 PM a 10:00 PM. "
-    f"Las reservaciones están disponibles de 2:00 PM a 9:00 PM."
+    "ACAXEEMX atiende de Lunes a Domingo de 2:00 PM a 10:00 PM. "
+    "Las reservaciones estan disponibles de 2:00 PM a 9:00 PM."
 )
 
 
 class ReservationService:
-    def create_reservation(self, data: Reserva) -> str:
-        # Validar que la hora esté dentro del horario permitido
+    def create_reservation(self, data: Reserva) -> dict:
+        """
+        Retorna {exito: bool, mensaje: str}.
+        """
+        # Validar horario
         if not is_valid_reservation_hour(data.hora):
             logger.info(f"Hora fuera de horario: {data.hora}")
-            return (
-                f"No es posible hacer una reservación a las {data.hora}. "
-                f"{HORARIO_MSG}"
-            )
+            return {
+                "exito": False,
+                "mensaje": (
+                    f"No es posible hacer una reservacion a las {data.hora}. "
+                    f"{HORARIO_MSG}"
+                ),
+            }
 
-        # Verificar disponibilidad de mesas
-        count = reservation_repo.count_by_hour(data.fecha, data.hora)
-        if count >= Config.MAX_RESERVATIONS_PER_HOUR:
-            logger.info(f"Sin disponibilidad: {data.fecha} {data.hora} ({count} reservas)")
-            return (
-                f"Lo sentimos, no hay disponibilidad para el {data.fecha} "
-                f"a las {data.hora}. Ya se alcanzó el límite de reservaciones para esa hora."
-            )
+        # Asignar mesa
+        assignment = table_assignment_service.assign(
+            fecha=data.fecha,
+            hora=data.hora,
+            num_persons=data.numero_personas,
+        )
 
-        # Crear reservacion
+        if assignment is None:
+            # Sin mesa disponible — construir alternativas
+            day_avail = table_assignment_service.get_availability_for_date(data.fecha)
+            alternatives = self._build_alternatives(
+                day_avail, data.numero_personas, data.fecha, data.hora,
+            )
+            logger.info(f"Sin disponibilidad para {data.numero_personas} personas: {data.fecha} {data.hora}")
+            return {
+                "exito": False,
+                "mensaje": (
+                    f"No hay mesas disponibles para {data.numero_personas} persona(s) "
+                    f"el {data.fecha} a las {data.hora}.\n\n"
+                    f"{alternatives}"
+                ),
+            }
+
+        # Crear reservacion con mesa asignada
         reservation_data = {
             "nombre": data.nombre,
             "numero_personas": data.numero_personas,
             "telefono": data.telefono,
             "fecha": data.fecha,
             "hora": data.hora,
+            "mesa": assignment["table_id"],
+            "zona": assignment["zone"],
         }
         key = reservation_repo.create(reservation_data)
 
-        logger.info(f"Reserva creada: {key} para {data.nombre}")
+        logger.info(f"Reserva creada: {key} mesa {assignment['table_id']} para {data.nombre}")
+        return {
+            "exito": True,
+            "mensaje": (
+                f"Reserva creada exitosamente en ACAXEEMX. "
+                f"Nombre: {data.nombre}, "
+                f"Fecha: {data.fecha}, "
+                f"Hora: {data.hora}, "
+                f"Personas: {data.numero_personas}, "
+                f"Telefono: {data.telefono}, "
+                f"Mesa: {assignment['table_id']} "
+                f"(Zona {assignment['zone']} - {assignment['zone_name']}, "
+                f"{assignment['seats']} sillas)."
+            ),
+        }
+
+    def _build_alternatives(
+        self, day_avail: dict, num_persons: int, fecha: str, hora_solicitada: str
+    ) -> str:
+        """Construye sugerencias de horarios donde si hay mesa para el grupo."""
+        seat_rules_ref = None
+        lines = []
+        for hora, avail in day_avail.items():
+            if hora == hora_solicitada:
+                continue
+            seat_rules = avail["seat_rules"]
+            seat_rules_ref = seat_rules
+            suitable = 0
+            for seats, count in avail["available_by_capacity"].items():
+                rule = seat_rules.get(str(seats))
+                if not rule:
+                    continue
+                if num_persons > seats or num_persons < rule["min_persons"]:
+                    continue
+                suitable += count
+            if suitable > 0:
+                lines.append(f"  {hora} — {suitable} mesa(s) disponible(s)")
+
+        if not lines:
+            return (
+                f"No hay mesas disponibles para {num_persons} persona(s) "
+                f"en ninguna hora del {fecha}."
+            )
+
         return (
-            f"Reserva creada exitosamente en ACAXEEMX. "
-            f"Nombre: {data.nombre}, "
-            f"Fecha: {data.fecha}, "
-            f"Hora: {data.hora}, "
-            f"Personas: {data.numero_personas}, "
-            f"Teléfono: {data.telefono}."
+            f"Horarios con mesa para {num_persons} persona(s) el {fecha}:\n"
+            + "\n".join(lines)
+            + "\n\n¿Te gustaria reservar en alguno de estos horarios?"
         )
 
 

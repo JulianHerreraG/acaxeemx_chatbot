@@ -17,31 +17,41 @@ def get_today_date_str() -> str:
     return datetime.now(tz).strftime("%Y-%m-%d")
 
 
+def hora_to_minutes(hora: str) -> int:
+    """
+    Convierte una hora en formato 'HH:MM' a minutos desde medianoche.
+    Acepta también 'HH' (asume :00) y formatos 12h como '2:00 PM'.
+    """
+    hora_clean = hora.strip().upper()
+    is_pm = "PM" in hora_clean
+    is_am = "AM" in hora_clean
+    hora_clean = hora_clean.replace("PM", "").replace("AM", "").strip()
+
+    if ":" in hora_clean:
+        parts = hora_clean.split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+    else:
+        hour = int(hora_clean)
+        minute = 0
+
+    if is_pm and hour != 12:
+        hour += 12
+    elif is_am and hour == 12:
+        hour = 0
+
+    return hour * 60 + minute
+
+
 def is_valid_reservation_hour(hora: str) -> bool:
     """
     Valida que la hora esté dentro del horario de reservaciones permitido.
-    Acepta formatos: "14:00", "14", "2:00 PM", etc.
-    Retorna True si es válida (entre OPEN_HOUR y LAST_RESERVATION_HOUR).
+    Rango válido: OPEN_HOUR:OPEN_MINUTE – LAST_RESERVATION_HOUR:LAST_RESERVATION_MINUTE
     """
     try:
-        # Normalizar: extraer la hora entera
-        hora_clean = hora.strip().upper()
-
-        # Intentar parsear como HH:MM
-        if ":" in hora_clean:
-            parts = hora_clean.replace("PM", "").replace("AM", "").strip().split(":")
-            hour = int(parts[0])
-            # Ajustar si viene en formato 12h
-            if "PM" in hora.upper() and hour != 12:
-                hour += 12
-            elif "AM" in hora.upper() and hour == 12:
-                hour = 0
-        else:
-            hour = int(hora_clean.replace("PM", "").replace("AM", "").strip())
-            if "PM" in hora.upper() and hour != 12:
-                hour += 12
-
-        return Config.RESTAURANT_OPEN_HOUR <= hour <= Config.RESTAURANT_LAST_RESERVATION_HOUR
-
+        total = hora_to_minutes(hora)
+        open_total = Config.RESTAURANT_OPEN_HOUR * 60 + Config.RESTAURANT_OPEN_MINUTE
+        last_total = Config.RESTAURANT_LAST_RESERVATION_HOUR * 60 + Config.RESTAURANT_LAST_RESERVATION_MINUTE
+        return open_total <= total <= last_total
     except (ValueError, IndexError):
         return False

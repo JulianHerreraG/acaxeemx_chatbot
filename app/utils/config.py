@@ -16,14 +16,20 @@ class Config:
     # Con defaults
     FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_conection.json")
     LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-6")
+    LLM_AUX_MODEL = os.getenv("LLM_AUX_MODEL", "gpt-4o-mini")
     LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://models.inference.ai.azure.com")
     RESTAURANT_NAME = os.getenv("RESTAURANT_NAME", "Acaxeemx")
     TIMEZONE = os.getenv("TIMEZONE", "America/Mazatlan")
-    MAX_RESERVATIONS_PER_HOUR = int(os.getenv("MAX_RESERVATIONS_PER_HOUR", "10"))
     MAX_CONVERSATION_HISTORY = int(os.getenv("MAX_CONVERSATION_HISTORY", "20"))
     LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
 
-    # Horarios de apertura (hora entera, formato 24h)
-    RESTAURANT_OPEN_HOUR = int(os.getenv("RESTAURANT_OPEN_HOUR", "14"))   # 2:00 PM
-    RESTAURANT_CLOSE_HOUR = int(os.getenv("RESTAURANT_CLOSE_HOUR", "22"))  # 10:00 PM
-    RESTAURANT_LAST_RESERVATION_HOUR = int(os.getenv("RESTAURANT_LAST_RESERVATION_HOUR", "21"))  # última reserva 9:00 PM
+    # Horarios de apertura (formato 24h)
+    RESTAURANT_OPEN_HOUR = int(os.getenv("RESTAURANT_OPEN_HOUR", "14"))          # 2:00 PM
+    RESTAURANT_OPEN_MINUTE = int(os.getenv("RESTAURANT_OPEN_MINUTE", "0"))
+    RESTAURANT_CLOSE_HOUR = int(os.getenv("RESTAURANT_CLOSE_HOUR", "22"))         # 10:00 PM
+    RESTAURANT_LAST_RESERVATION_HOUR = int(os.getenv("RESTAURANT_LAST_RESERVATION_HOUR", "20"))    # 8:30 PM
+    RESTAURANT_LAST_RESERVATION_MINUTE = int(os.getenv("RESTAURANT_LAST_RESERVATION_MINUTE", "30"))
+
+    # Ventana de ocupación por reserva (minutos). Dos reservas en la misma
+    # mesa tienen conflicto si |T_nueva - T_existente| < MIN_STAY_MINUTES.
+    MIN_STAY_MINUTES = int(os.getenv("MIN_STAY_MINUTES", "59"))
