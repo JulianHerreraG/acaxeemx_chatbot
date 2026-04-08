@@ -33,6 +33,12 @@ class ConsultarDisponibilidad(BaseModel):
     numero_personas: Optional[int] = None
 
 
+class ConsultarReserva(BaseModel):
+    estado: bool = False
+    nombre: Optional[str] = None
+    telefono: Optional[str] = None
+
+
 class ModificarReserva(BaseModel):
     estado: bool = False
     # Datos de la reserva original a cancelar
@@ -59,6 +65,7 @@ class ActionResponse(BaseModel):
     reserva: Reserva = Reserva()
     cancelar_reserva: CancelarReserva = CancelarReserva()
     consultar_disponibilidad: ConsultarDisponibilidad = ConsultarDisponibilidad()
+    consultar_reserva: ConsultarReserva = ConsultarReserva()
     modificar_reserva: ModificarReserva = ModificarReserva()
     mensaje_respuesta_directo: MensajeRespuestaDirecto = MensajeRespuestaDirecto()
 
@@ -87,5 +94,9 @@ class ActionResponse(BaseModel):
         if self.modificar_reserva.estado:
             if not self.modificar_reserva.nombre_original or not self.modificar_reserva.telefono_original:
                 self.modificar_reserva.estado = False
+
+        if self.consultar_reserva.estado:
+            if not self.consultar_reserva.nombre or not self.consultar_reserva.telefono:
+                self.consultar_reserva.estado = False
 
         return self

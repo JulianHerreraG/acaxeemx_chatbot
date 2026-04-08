@@ -9,6 +9,7 @@ from app.services.reservation_service import reservation_service
 from app.services.cancellation_service import cancellation_service
 from app.services.availability_service import availability_service
 from app.services.modification_service import modification_service
+from app.services.lookup_service import lookup_service
 
 logger = setup_logger("orchestrator")
 
@@ -79,6 +80,10 @@ class Orchestrator:
         elif action_response.consultar_disponibilidad.estado:
             logger.info("Ejecutando: consultar disponibilidad")
             action_result = availability_service.check_availability(action_response.consultar_disponibilidad)
+
+        elif action_response.consultar_reserva.estado:
+            logger.info("Ejecutando: consultar reserva")
+            action_result = lookup_service.lookup_reservations(action_response.consultar_reserva)
 
         elif action_response.modificar_reserva.estado:
             logger.info("Ejecutando: modificar reserva")

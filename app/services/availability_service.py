@@ -1,6 +1,6 @@
 from app.schemas.action_schema import ConsultarDisponibilidad
 from app.services.table_assignment_service import table_assignment_service
-from app.utils.datetime_helper import is_valid_reservation_hour
+from app.utils.datetime_helper import get_current_datetime, hora_to_minutes, is_valid_reservation_hour
 from app.utils.logger import setup_logger
 
 logger = setup_logger("availability_service")
@@ -34,6 +34,21 @@ class AvailabilityService:
                     f"{day_info}"
                 ),
             }
+
+        # Si es hoy y la hora ya pasó, redirigir a disponibilidad futura
+        current_dt = get_current_datetime()
+        if data.fecha == current_dt["fecha"]:
+            if hora_to_minutes(data.hora) < hora_to_minutes(current_dt["Hora"]):
+                logger.info(f"Hora {data.hora} ya pasó hoy, mostrando disponibilidad futura")
+                day_info = self._build_day_summary(data.fecha, data.numero_personas)
+                return {
+                    "exito": True,
+                    "mensaje": (
+                        f"Las {data.hora} ya pasaron hoy. "
+                        f"Aquí la disponibilidad para el resto del día:\n\n"
+                        f"{day_info}"
+                    ),
+                }
 
         avail = table_assignment_service.get_availability_for_hour(data.fecha, data.hora)
 
@@ -106,8 +121,17 @@ class AvailabilityService:
         }
 
     def _build_day_summary(self, fecha: str, num_persons: int | None) -> str:
-        """Construye resumen de horas disponibles para el dia."""
+        """Construye resumen de horas disponibles para el dia (solo horas vigentes)."""
         all_hours = table_assignment_service.get_availability_for_date(fecha)
+
+        # Si es hoy, filtrar las horas que ya pasaron
+        current_dt = get_current_datetime()
+        if fecha == current_dt["fecha"]:
+            current_mins = hora_to_minutes(current_dt["Hora"])
+            all_hours = {
+                hora: avail for hora, avail in all_hours.items()
+                if hora_to_minutes(hora) >= current_mins
+            }
 
         lines = []
         for hora, avail in all_hours.items():
