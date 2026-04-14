@@ -1,32 +1,79 @@
-# Proyecto Acaxee — Contexto para agentes de IA
+# acaxeemx_chatbot — Contexto para el Dev del Chatbot
 
-Este archivo es cargado automáticamente por Claude Code al abrir este repo. Sirve como índice del contexto versionado del proyecto. Para detalles, sigue los enlaces.
+> Contexto específico de este repo. Para el ecosistema completo, ver el [`CLAUDE.md` global](../CLAUDE.md) en `FDx Company/`.
 
-## Arquitectura del proyecto
+---
 
-- [app/](app/) — Código del **chatbot Acaxee** (Flask + Telegram + Firebase RTDB + GitHub Models / Anthropic).
-- [app/prompts/system_prompt.py](app/prompts/system_prompt.py) — Prompt principal del chatbot. Fuente de verdad operativa.
-- [prompt_engineering/](prompt_engineering/) — Nivel superior de arquitectura: diseño y revisión de prompts para todos los agentes del ecosistema Acaxee. **No es parte del runtime del chatbot.**
+## Quién trabaja aquí
 
-## Agente Ingeniero de Prompts (AIP)
+El **Dev del Chatbot** — arquitecto Python del chatbot Acaxee. Lee tu identidad completa en:
 
-El proyecto cuenta con un rol de manager de prompts definido en [prompt_engineering/agent_prompt_engineer.md](prompt_engineering/agent_prompt_engineer.md). Cualquier tarea de diseño, revisión o mejora de prompts (del chatbot o de agentes futuros) debe pasar por ese rol y apoyarse en la base de conocimiento que mantiene.
+[`../acaxee_platform/prompt_engineering/agents/chatbot_developer.md`](../acaxee_platform/prompt_engineering/agents/chatbot_developer.md)
+
+Ese archivo es autosuficiente: arquitectura, stack, funcionalidades implementadas, pendientes y relación con el AIP.
+
+---
+
+## Qué contiene este repo
+
+```
+acaxeemx_chatbot/
+├── app/                              ← Todo el código del chatbot
+│   ├── main.py                       ← Entry point Flask
+│   ├── agents/orchestrator.py        ← Orquesta LLM + acciones JSON
+│   ├── bot/                          ← Integración Telegram (telebot)
+│   ├── clients/                      ← Clientes externos (LLM, Telegram)
+│   ├── prompts/system_prompt.py      ← ⚠️ Mantenido por el AIP. Solo leer/consumir.
+│   ├── repositories/                 ← Firebase (conversaciones, reservas, config)
+│   ├── schemas/action_schema.py      ← Schema del JSON de acciones
+│   ├── services/                     ← Lógica de negocio (reserva, cancelación, etc.)
+│   ├── tasks/cleanup.py              ← Limpieza diaria 3:00 AM
+│   └── utils/                        ← Config, logger, utilidades
+├── scripts/                          ← Seed de Firebase y utilidades
+├── tests/                            ← Tests del chatbot
+└── requirements.txt
+```
+
+---
 
 ## Base de conocimiento del negocio
 
-Vive en [prompt_engineering/knowledge/](prompt_engineering/knowledge/) y es la **fuente de verdad única** para que cualquier agente nuevo herede coherencia de marca, tono y reglas del negocio:
+El conocimiento de marca y del restaurante es **global** al ecosistema. Vive en:
 
-- [prompt_engineering/knowledge/brand_voice.md](prompt_engineering/knowledge/brand_voice.md) — Esencia, personalidad, tono, framework conversacional (Conectar → Resolver → Sugerir), triggers de venta, prohibiciones. Voz oficial de Acaxee.
+[`../acaxee_platform/prompt_engineering/knowledge/`](../acaxee_platform/prompt_engineering/knowledge/)
 
-- [prompt_engineering/knowledge/restaurant_layout.md](prompt_engineering/knowledge/restaurant_layout.md) — Distribución de mesas: 42 mesas, 7 zonas, 240 sillas. Fuente de verdad para asignación de mesas en reservas.
+- [`brand_voice.md`](../acaxee_platform/prompt_engineering/knowledge/brand_voice.md) — Esencia, personalidad, tono oficial de Acaxee.
+- [`restaurant_layout.md`](../acaxee_platform/prompt_engineering/knowledge/restaurant_layout.md) — 42 mesas, 7 zonas, 240 sillas.
+- [`restaurant_tables.json`](../acaxee_platform/prompt_engineering/knowledge/restaurant_tables.json) — JSON para seed a Firebase.
 
-- [prompt_engineering/knowledge/restaurant_tables.json](prompt_engineering/knowledge/restaurant_tables.json) — JSON estructurado con mesas, zonas, capacidad, forma y reglas de ocupación mínima. Fuente para seed a Firebase (`/restaurant_config`). Se sube con `python -m scripts.seed_restaurant_config`.
+> El `system_prompt.py` ya tiene este conocimiento integrado. Consulta los archivos anteriores cuando necesites entender una regla de negocio o cuando el AIP te envíe una spec.
 
-A medida que crezca el ecosistema (CRM, marketing, reportería), se sumarán aquí fichas adicionales (hechos de negocio, registro de agentes, etc.).
+---
 
-## Reglas para agentes de IA que trabajen en este repo
+## El AIP y tu relación con él
 
-1. **Voz de marca:** Cualquier prompt o texto de cara al cliente final debe respetar [prompt_engineering/knowledge/brand_voice.md](prompt_engineering/knowledge/brand_voice.md). Nada de "estimado cliente", nada de "el más exclusivo".
-2. **Segmentación:** No mezclar código del chatbot ([app/](app/)) con artefactos de diseño de prompts ([prompt_engineering/](prompt_engineering/)). Son capas distintas de la arquitectura.
-3. **Idioma:** Español natural. El negocio, el equipo y los clientes son hispanohablantes.
-4. **Sitio web (acaxeemazatlan.com):** Referencia de *contenido* (platos, servicios, vibra del lugar), NO de *voz*. La voz se define en `brand_voice.md`.
+El **AIP** (Agente Ingeniero de Prompts) trabaja en [`../acaxee_platform/`](../acaxee_platform/). Es tu manager en decisiones de negocio:
+
+- **Él mantiene** `app/prompts/system_prompt.py` — no lo edites por tu cuenta.
+- **Él define** las reglas de conversación, tono, flujos y políticas del restaurante.
+- **Tú implementas** esas reglas en código.
+
+Si una tarea implica decidir **qué dice o cómo se comporta el bot**, pide al usuario que lo consulte con el AIP antes de implementar.
+
+---
+
+## Modelo de trabajo multi-agente y persistencia
+
+- **Cada sesión arranca en frío.** No se preserva historial entre sesiones.
+- **Fuente de verdad:** los archivos versionados en este repo + `acaxee_platform/`.
+- Toda decisión técnica relevante que tomes (nueva constante, cambio de esquema, nueva lógica) debe quedar en el código y en un commit antes de cerrar la sesión.
+
+---
+
+## Reglas de este repo
+
+1. Solo trabajas en `app/`, `scripts/` y `tests/`. No tocas `../acaxee_platform/`.
+2. No editas `app/prompts/system_prompt.py` sin spec del AIP.
+3. No hardcodees secretos. Tokens y API keys van en `.env` (no versionado).
+4. El patrón JSON-por-acciones no se rompe. No clasifiques intención con `if "reserva" in msg`.
+5. Separación de capas: `bot/` no habla con Firebase, `services/` no habla con Telegram, `repositories/` no toma decisiones de negocio.

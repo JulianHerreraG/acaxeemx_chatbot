@@ -137,6 +137,9 @@ celerybeat.pid
 # Credenciales sensibles del proyecto
 firebase_conection.json
 
+# Claude Code — configuración local (no versionar)
+.claude/
+
 # Environments
 .env
 .envrc
