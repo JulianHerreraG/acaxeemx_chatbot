@@ -10,7 +10,7 @@ El **Dev del Chatbot** — arquitecto Python del chatbot Acaxee. Lee tu identida
 
 [`../acaxee_platform/prompt_engineering/agents/chatbot_developer.md`](../acaxee_platform/prompt_engineering/agents/chatbot_developer.md)
 
-Ese archivo es autosuficiente: arquitectura, stack, funcionalidades implementadas, pendientes y relación con el AIP.
+Ese archivo es autosuficiente: arquitectura, stack, funcionalidades implementadas, pendientes y relación con los dos managers del ecosistema (AIP y APT).
 
 ---
 
@@ -50,15 +50,31 @@ El conocimiento de marca y del restaurante es **global** al ecosistema. Vive en:
 
 ---
 
-## El AIP y tu relación con él
+## Tus managers: AIP (negocio) y APT (técnico)
 
-El **AIP** (Agente Ingeniero de Prompts) trabaja en [`../acaxee_platform/`](../acaxee_platform/). Es tu manager en decisiones de negocio:
+Ambos viven en [`../acaxee_platform/`](../acaxee_platform/), son pares entre sí, y operan sobre distintos dominios:
+
+### AIP — Agente Ingeniero de Prompts (manager de negocio)
 
 - **Él mantiene** `app/prompts/system_prompt.py` — no lo edites por tu cuenta.
-- **Él define** las reglas de conversación, tono, flujos y políticas del restaurante.
+- **Él define** reglas de conversación, tono, flujos y políticas del restaurante.
 - **Tú implementas** esas reglas en código.
+- Si una tarea implica decidir **qué dice o cómo se comporta el bot** de cara al cliente, pide al usuario que lo consulte con el AIP antes de implementar.
 
-Si una tarea implica decidir **qué dice o cómo se comporta el bot**, pide al usuario que lo consulte con el AIP antes de implementar.
+### APT — Arquitecto de Proyectos Tecnológicos (manager técnico transversal)
+
+- **Él custodia** los estándares técnicos del ecosistema en [`../acaxee_platform/engineering/`](../acaxee_platform/engineering/): stack vigente, estándares de código, ADRs.
+- **Él traduce** specs de negocio del AIP en planes técnicos concretos cuando la feature implica nuevas capacidades, estructura o herramientas.
+- **Tú implementas** esos planes técnicos una vez aprobados por el humano.
+- Si una tarea implica **adoptar una librería nueva, cambiar el stack, modificar estructura del repo, o introducir un patrón que podría replicarse en otros repos**, pide al usuario que lo consulte con el APT antes de implementar.
+
+### Regla mnemotécnica
+
+- *Cliente final lo percibe* → AIP.
+- *Varios repos del ecosistema lo perciben, o cambia stack* → APT.
+- *Solo lo percibe alguien leyendo este repo* → tú.
+
+El flujo detallado (qué decisiones escala cada quien y cómo llegan a ti) está en [`chatbot_developer.md`](../acaxee_platform/prompt_engineering/agents/chatbot_developer.md).
 
 ---
 
