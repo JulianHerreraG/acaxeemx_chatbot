@@ -51,19 +51,22 @@ class ReservationService:
                 ),
             }
 
-        # Crear reservacion con mesa asignada
-        reservation_data = {
-            "nombre": data.nombre,
-            "numero_personas": data.numero_personas,
-            "telefono": data.telefono,
-            "fecha": data.fecha,
-            "hora": data.hora,
-            "mesa": assignment["table_id"],
-            "zona": assignment["zone"],
-        }
-        key = reservation_repo.create(reservation_data)
+        # Crear reservacion con schema ADR 0003
+        doc_id = reservation_repo.create({
+            "customerName": data.nombre,
+            "partySize": data.numero_personas,
+            "customerPhone": data.telefono,
+            "date": data.fecha,
+            "time": data.hora,
+            "tableId": assignment["table_id"],
+            "zone": assignment["zone"],
+            "status": "confirmed",
+            "source": "chatbot",
+            "notes": "",
+            "tags": [],
+        })
 
-        logger.info(f"Reserva creada: {key} mesa {assignment['table_id']} para {data.nombre}")
+        logger.info(f"Reserva creada: {doc_id} mesa {assignment['table_id']} para {data.nombre}")
         return {
             "exito": True,
             "mensaje": (
@@ -83,13 +86,11 @@ class ReservationService:
         self, day_avail: dict, num_persons: int, fecha: str, hora_solicitada: str
     ) -> str:
         """Construye sugerencias de horarios donde si hay mesa para el grupo."""
-        seat_rules_ref = None
         lines = []
         for hora, avail in day_avail.items():
             if hora == hora_solicitada:
                 continue
             seat_rules = avail["seat_rules"]
-            seat_rules_ref = seat_rules
             suitable = 0
             for seats, count in avail["available_by_capacity"].items():
                 rule = seat_rules.get(str(seats))

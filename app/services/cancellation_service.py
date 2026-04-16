@@ -26,14 +26,14 @@ class CancellationService:
                 ),
             }
 
-        key, reservation = result
-        reservation_repo.delete(data.fecha, key)
+        doc_id, reservation = result
+        reservation_repo.cancel(doc_id)
 
         mesa_info = ""
-        if reservation.get("mesa"):
-            mesa_info = f", Mesa: {reservation['mesa']}"
+        if reservation.get("tableId"):
+            mesa_info = f", Mesa: {reservation['tableId']}"
 
-        logger.info(f"Reservacion cancelada: {key}")
+        logger.info(f"Reservacion cancelada: {doc_id}")
         return {
             "exito": True,
             "mensaje": (

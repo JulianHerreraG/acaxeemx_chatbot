@@ -29,9 +29,9 @@ class LookupService:
             }
 
         lines = []
-        for fecha, key, res in results:
-            hora = res.get("hora", "")
-            personas = res.get("numero_personas", "?")
+        for fecha, doc_id, res in results:
+            hora = res.get("time", "")
+            personas = res.get("partySize", "?")
             lines.append(f"  • {fecha} a las {hora} — {personas} persona(s)")
 
         resumen = "\n".join(lines)
@@ -41,12 +41,12 @@ class LookupService:
             "reservas": [
                 {
                     "fecha": fecha,
-                    "hora": res.get("hora"),
-                    "numero_personas": res.get("numero_personas"),
-                    "nombre": res.get("nombre"),
-                    "telefono": res.get("telefono"),
+                    "hora": res.get("time"),
+                    "numero_personas": res.get("partySize"),
+                    "nombre": res.get("customerName"),
+                    "telefono": res.get("customerPhone"),
                 }
-                for fecha, key, res in results
+                for fecha, doc_id, res in results
             ],
             "mensaje": (
                 f"Reservas vigentes a nombre de {data.nombre}:\n"

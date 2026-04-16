@@ -22,7 +22,9 @@ def handle_message(message):
 
     try:
         response = orchestrator.process_message(chat_id, user_text)
-        bot.reply_to(message, response)
+        # response es None cuando la conversacion esta en modo admin (bot silenciado)
+        if response is not None:
+            bot.reply_to(message, response)
     except Exception as e:
         logger.error(f"Error manejando mensaje de {chat_id}: {e}", exc_info=True)
         bot.reply_to(message, "Lo siento, ocurrió un error. Por favor intenta de nuevo.")

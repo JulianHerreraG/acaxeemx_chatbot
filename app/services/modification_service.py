@@ -65,9 +65,9 @@ class ModificationService:
         # Si hay varias y no se especifico cual
         if len(matches) > 1 and not (data.fecha_original and data.hora_original):
             detalle = "\n".join(
-                f"  - {fecha} a las {v.get('hora')} – {v.get('numero_personas')} persona(s)"
-                + (f" (Mesa {v.get('mesa')})" if v.get("mesa") else "")
-                for fecha, key, v in matches
+                f"  - {fecha} a las {v.get('time')} – {v.get('partySize')} persona(s)"
+                + (f" (Mesa {v.get('tableId')})" if v.get("tableId") else "")
+                for fecha, doc_id, v in matches
             )
             logger.info(f"Modificacion: {len(matches)} reservas para {data.nombre_original}")
             return {
@@ -84,9 +84,9 @@ class ModificationService:
         if len(matches) == 1:
             target = matches[0]
         else:
-            for fecha, key, value in matches:
-                if fecha == data.fecha_original and value.get("hora") == data.hora_original:
-                    target = (fecha, key, value)
+            for fecha, doc_id, value in matches:
+                if fecha == data.fecha_original and value.get("time") == data.hora_original:
+                    target = (fecha, doc_id, value)
                     break
 
         if target is None:
@@ -98,16 +98,16 @@ class ModificationService:
                 ),
             }
 
-        fecha_orig, key_orig, reserva_orig = target
+        fecha_orig, doc_id_orig, reserva_orig = target
 
         # --- Cancelar la reserva original ---
-        reservation_repo.delete(fecha_orig, key_orig)
-        logger.info(f"Modificacion: reserva {key_orig} cancelada ({fecha_orig})")
+        reservation_repo.cancel(doc_id_orig)
+        logger.info(f"Modificacion: reserva {doc_id_orig} cancelada ({fecha_orig})")
 
         cancel_msg = (
             f"Reservacion original cancelada: "
-            f"{data.nombre_original}, {fecha_orig} a las {reserva_orig.get('hora')}"
-            + (f" (Mesa {reserva_orig.get('mesa')})" if reserva_orig.get("mesa") else "")
+            f"{data.nombre_original}, {fecha_orig} a las {reserva_orig.get('time')}"
+            + (f" (Mesa {reserva_orig.get('tableId')})" if reserva_orig.get("tableId") else "")
             + "."
         )
 
@@ -166,16 +166,20 @@ class ModificationService:
                 ),
             }
 
-        new_key = reservation_repo.create({
-            "nombre": data.nombre_nuevo,
-            "numero_personas": data.numero_personas_nuevo,
-            "telefono": data.telefono_nuevo,
-            "fecha": data.fecha_nueva,
-            "hora": data.hora_nueva,
-            "mesa": assignment["table_id"],
-            "zona": assignment["zone"],
+        new_doc_id = reservation_repo.create({
+            "customerName": data.nombre_nuevo,
+            "partySize": data.numero_personas_nuevo,
+            "customerPhone": data.telefono_nuevo,
+            "date": data.fecha_nueva,
+            "time": data.hora_nueva,
+            "tableId": assignment["table_id"],
+            "zone": assignment["zone"],
+            "status": "confirmed",
+            "source": "chatbot",
+            "notes": "",
+            "tags": [],
         })
-        logger.info(f"Modificacion: nueva reserva {new_key} mesa {assignment['table_id']} creada ({data.fecha_nueva})")
+        logger.info(f"Modificacion: nueva reserva {new_doc_id} mesa {assignment['table_id']} creada ({data.fecha_nueva})")
 
         return {
             "exito": True,

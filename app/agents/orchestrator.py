@@ -20,29 +20,40 @@ class Orchestrator:
     def __init__(self):
         self.llm_client = LLMClient()
 
-    def process_message(self, chat_id: str, user_message: str) -> str:
+    def process_message(self, chat_id: str, user_message: str) -> str | None:
+        """
+        Procesa un mensaje del usuario y retorna la respuesta del bot.
+        Retorna None si la conversacion esta en modo admin (bot silenciado).
+        """
         try:
             return self._process(chat_id, user_message)
         except Exception as e:
             logger.error(f"Error procesando mensaje de {chat_id}: {e}", exc_info=True)
             return FALLBACK_MESSAGE
 
-    def _process(self, chat_id: str, user_message: str) -> str:
+    def _process(self, chat_id: str, user_message: str) -> str | None:
         # Paso 1: Obtener fecha/hora actual
         datetime_info = get_current_datetime()
         logger.info(f"Procesando mensaje de {chat_id}: {user_message[:50]}...")
 
-        # Paso 2: Cargar historial de conversacion
+        # Paso 2: Verificar modo admin — si esta activo, guardar el mensaje
+        # en Firestore para el monitor y silenciar el bot.
+        if conversation_repo.is_admin_mode(chat_id):
+            logger.info(f"Conversacion {chat_id} en modo admin — mensaje guardado, bot silenciado")
+            conversation_repo.save_turn(chat_id, "user", user_message)
+            return None
+
+        # Paso 3: Cargar historial de conversacion
         history = conversation_repo.get_history(chat_id)
 
-        # Paso 3: Verificar si es mensaje de cierre post-confirmacion
+        # Paso 4: Verificar si es mensaje de cierre post-confirmacion
         closure_response = self._try_closure(user_message, history)
         if closure_response:
             conversation_repo.save_turn(chat_id, "user", user_message)
             conversation_repo.save_turn(chat_id, "assistant", closure_response)
             return closure_response
 
-        # Paso 4: Construir mensajes para el LLM principal
+        # Paso 5: Construir mensajes para el LLM principal
         system_msg = SYSTEM_PROMPT.format(
             restaurant_name=Config.RESTAURANT_NAME,
             hora_actual=datetime_info["Hora"],
@@ -52,21 +63,23 @@ class Orchestrator:
         messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
-        # Paso 5: Primera pasada - llamar al LLM
+        # Paso 6: Primera pasada - llamar al LLM
         raw_response = self._call_llm_with_retry(messages)
         if raw_response is None:
+            conversation_repo.mark_needs_human(chat_id)
             return FALLBACK_MESSAGE
 
-        # Paso 6: Parsear y validar JSON
+        # Paso 7: Parsear y validar JSON
         action_response = self._parse_with_retry(raw_response, messages)
         if action_response is None:
+            conversation_repo.mark_needs_human(chat_id)
             return FALLBACK_MESSAGE
 
-        # Paso 7: Sobreescribir fecha_hora_actual con valores del sistema
+        # Paso 8: Sobreescribir fecha_hora_actual con valores del sistema
         action_response.fecha_hora_actual.Hora = datetime_info["Hora"]
         action_response.fecha_hora_actual.fecha = datetime_info["fecha"]
 
-        # Paso 8: Determinar y ejecutar accion
+        # Paso 9: Determinar y ejecutar accion
         action_result = None
 
         if action_response.reserva.estado:
@@ -89,7 +102,7 @@ class Orchestrator:
             logger.info("Ejecutando: modificar reserva")
             action_result = modification_service.modify_reservation(action_response.modificar_reserva)
 
-        # Paso 9: Determinar respuesta final
+        # Paso 10: Determinar respuesta final
         if action_result is not None:
             final_message = self._resolve_action_result(
                 action_result, action_response, messages, raw_response,
@@ -98,13 +111,15 @@ class Orchestrator:
             # Respuesta directa (sin accion)
             final_message = action_response.mensaje_respuesta_directo.mensaje
             if not final_message:
-                # El LLM genero un JSON sin accion ejecutable y sin mensaje:
-                # probablemente intento activar una accion con datos incompletos
-                # y apago mensaje_respuesta_directo por la Regla 5. Recuperar.
                 logger.warning("JSON sin accion ni mensaje — ejecutando llamada de recuperacion")
                 final_message = self._recovery_pass(messages, raw_response)
 
-        # Paso 10: Guardar turno en historial
+        # Si despues de todo no hay respuesta, marcar needsHuman
+        if not final_message:
+            conversation_repo.mark_needs_human(chat_id)
+            final_message = FALLBACK_MESSAGE
+
+        # Paso 11: Guardar turno en historial
         conversation_repo.save_turn(chat_id, "user", user_message)
         conversation_repo.save_turn(chat_id, "assistant", final_message)
 
@@ -189,10 +204,7 @@ class Orchestrator:
 
     def _recovery_pass(self, messages: list, raw_response: str) -> str:
         """
-        Llamada de recuperación cuando el JSON no tiene accion ejecutable ni mensaje.
-        Ocurre cuando el LLM activo una accion con datos incompletos (el validator la
-        descarto) y además apagó mensaje_respuesta_directo por la Regla 5.
-        Le pedimos que genere una respuesta conversacional pidiendo los datos faltantes.
+        Llamada de recuperacion cuando el JSON no tiene accion ejecutable ni mensaje.
         """
         recovery_messages = list(messages)
         recovery_messages.append({"role": "assistant", "content": raw_response})

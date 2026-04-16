@@ -1,81 +1,127 @@
-import time
-from app.repositories.firebase_client import get_db_reference
+from firebase_admin import firestore
+from app.repositories.firebase_client import get_firestore_client
 from app.utils.logger import setup_logger
 
 logger = setup_logger("reservation_repo")
 
+COL = "reservations"
+
 
 def _hora_to_minutes(hora_str: str) -> int:
-    """'HH:MM' → minutos desde medianoche. Solo formato 24h."""
+    """'HH:MM' → minutos desde medianoche."""
     parts = hora_str.split(":")
     return int(parts[0]) * 60 + int(parts[1])
 
 
-class ReservationRepo:
-    def create(self, reservation_data: dict) -> str:
-        fecha = reservation_data["fecha"]
-        ref = get_db_reference(f"/reservaciones/{fecha}")
-        new_ref = ref.push({
-            **reservation_data,
-            "created_at": int(time.time() * 1000),
-            "estado": "confirmada",
-        })
-        logger.info(f"Reservacion creada: {new_ref.key} para {fecha}")
-        return new_ref.key
+def _doc_to_dict(doc) -> dict:
+    """Convierte un DocumentSnapshot a dict incluyendo el id."""
+    data = doc.to_dict()
+    data["_doc_id"] = doc.id
+    return data
 
-    def find_by_criteria(self, fecha: str, hora: str, nombre: str, telefono: str):
-        """Busca una reserva exacta por fecha, hora, nombre y telefono."""
-        ref = get_db_reference(f"/reservaciones/{fecha}")
-        data = ref.get()
-        if not data:
-            return None
-        for key, value in data.items():
+
+class ReservationRepo:
+
+    def create(self, reservation_data: dict) -> str:
+        """
+        Crea una reservacion en Firestore.
+        reservation_data debe usar los nombres de campo del schema ADR 0003:
+          customerName, customerPhone, date, time, partySize, tableId,
+          zone, status, source, notes, tags
+        Retorna el doc_id generado.
+        """
+        db = get_firestore_client()
+        data = {
+            **reservation_data,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+        # Asegurar valores por defecto si no vienen en reservation_data
+        data.setdefault("status", "confirmed")
+        data.setdefault("source", "chatbot")
+        data.setdefault("notes", "")
+        data.setdefault("tags", [])
+
+        _, ref = db.collection(COL).add(data)
+        logger.info(f"Reservacion creada: {ref.id} para {reservation_data.get('date')}")
+        return ref.id
+
+    def cancel(self, doc_id: str) -> None:
+        """Marca una reservacion como cancelada (soft delete)."""
+        db = get_firestore_client()
+        db.collection(COL).document(doc_id).update({
+            "status": "cancelled",
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        })
+        logger.info(f"Reservacion cancelada: {doc_id}")
+
+    def find_by_criteria(
+        self, fecha: str, hora: str, nombre: str, telefono: str
+    ) -> tuple[str, dict] | None:
+        """
+        Busca una reserva activa (confirmed/seated) exacta por fecha, hora,
+        nombre y telefono.
+        Retorna (doc_id, reservation_dict) o None.
+        """
+        db = get_firestore_client()
+        docs = (
+            db.collection(COL)
+            .where("date", "==", fecha)
+            .where("status", "in", ["confirmed", "seated"])
+            .stream()
+        )
+        for doc in docs:
+            r = doc.to_dict()
             if (
-                value.get("hora") == hora
-                and value.get("nombre", "").lower() == nombre.lower()
-                and value.get("telefono") == telefono
+                r.get("time") == hora
+                and r.get("customerName", "").lower() == nombre.lower()
+                and r.get("customerPhone") == telefono
             ):
-                return key, value
+                return doc.id, r
         return None
 
-    def find_by_name_and_phone(self, nombre: str, telefono: str, from_date: str) -> list:
+    def find_by_name_and_phone(
+        self, nombre: str, telefono: str, from_date: str
+    ) -> list[tuple[str, str, dict]]:
         """
-        Busca todas las reservas futuras (>= from_date) con ese nombre y telefono.
-        Retorna lista de (fecha, key, reservation_data).
+        Busca reservas activas futuras (>= from_date) por nombre y telefono.
+        Retorna lista de (date, doc_id, reservation_dict) ordenada por fecha/hora.
         """
-        ref = get_db_reference("/reservaciones")
-        all_dates = ref.get()
-        if not all_dates:
-            return []
+        db = get_firestore_client()
+        # Consultar por telefono; filtrar fecha en Python para evitar indice compuesto
+        docs = (
+            db.collection(COL)
+            .where("customerPhone", "==", telefono)
+            .where("status", "in", ["confirmed", "seated"])
+            .stream()
+        )
         results = []
-        for fecha, reservations in all_dates.items():
+        for doc in docs:
+            r = doc.to_dict()
+            fecha = r.get("date", "")
             if fecha < from_date:
                 continue
-            if not isinstance(reservations, dict):
+            if r.get("customerName", "").lower() != nombre.lower():
                 continue
-            for key, value in reservations.items():
-                if (
-                    value.get("nombre", "").lower() == nombre.lower()
-                    and value.get("telefono") == telefono
-                ):
-                    results.append((fecha, key, value))
-        results.sort(key=lambda x: (x[0], x[2].get("hora", "")))
+            results.append((fecha, doc.id, r))
+
+        results.sort(key=lambda x: (x[0], x[2].get("time", "")))
         return results
 
     def get_occupied_tables_at_time(
         self, fecha: str, hora_str: str, min_stay_minutes: int
     ) -> set[str]:
         """
-        Retorna IDs de mesas bloqueadas en `hora_str` considerando la ventana
-        de ocupación: una mesa queda bloqueada si tiene una reserva en el rango
-        (hora_str - min_stay_minutes, hora_str + min_stay_minutes), extremos excluidos.
+        Retorna IDs de mesas bloqueadas en hora_str considerando la ventana
+        de ocupacion: bloquea si |T_nueva - T_existente| < min_stay_minutes.
+        Solo considera reservas confirmed o seated.
         """
-        data = self.get_all_for_date(fecha)
+        data = self._get_active_for_date(fecha)
         new_time = _hora_to_minutes(hora_str)
         occupied = set()
-        for key, value in data.items():
-            existing_hora = value.get("hora", "")
-            mesa = value.get("mesa")
+        for r in data:
+            existing_hora = r.get("time", "")
+            mesa = r.get("tableId")
             if not existing_hora or not mesa:
                 continue
             existing_time = _hora_to_minutes(existing_hora)
@@ -87,16 +133,16 @@ class ReservationRepo:
         self, fecha: str, hour_slots: list[str], min_stay_minutes: int
     ) -> dict[str, set[str]]:
         """
-        Una sola lectura a Firebase, luego calcula las mesas bloqueadas por
+        Una sola lectura a Firestore, luego calcula las mesas bloqueadas por
         ventana para cada slot. Retorna {hora_slot: set(mesa_ids)}.
         """
-        data = self.get_all_for_date(fecha)
+        data = self._get_active_for_date(fecha)
 
-        # Extraer (tiempo_minutos, mesa_id) de todas las reservas
+        # Extraer (tiempo_minutos, mesa_id) de todas las reservas activas
         existing: list[tuple[int, str]] = []
-        for key, value in data.items():
-            hora = value.get("hora", "")
-            mesa = value.get("mesa")
+        for r in data:
+            hora = r.get("time", "")
+            mesa = r.get("tableId")
             if hora and mesa:
                 existing.append((_hora_to_minutes(hora), str(mesa)))
 
@@ -111,14 +157,16 @@ class ReservationRepo:
 
         return result
 
-    def delete(self, fecha: str, key: str):
-        ref = get_db_reference(f"/reservaciones/{fecha}/{key}")
-        ref.delete()
-        logger.info(f"Reservacion eliminada: {key} de {fecha}")
-
-    def get_all_for_date(self, fecha: str) -> dict:
-        ref = get_db_reference(f"/reservaciones/{fecha}")
-        return ref.get() or {}
+    def _get_active_for_date(self, fecha: str) -> list[dict]:
+        """Lee todas las reservas confirmed/seated para una fecha."""
+        db = get_firestore_client()
+        docs = (
+            db.collection(COL)
+            .where("date", "==", fecha)
+            .where("status", "in", ["confirmed", "seated"])
+            .stream()
+        )
+        return [doc.to_dict() for doc in docs]
 
 
 reservation_repo = ReservationRepo()
