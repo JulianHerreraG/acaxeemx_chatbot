@@ -14,7 +14,9 @@ class ConversationRepo:
         """
         Guarda un turno en la subcolleccion messages y actualiza el documento
         padre de la conversacion (lastMessage, lastMessageAt).
-        Si el documento padre no existe, lo crea con valores por defecto.
+
+        IMPORTANTE: no sobreescribir campos de control (isAdminMode/adminUid),
+        ya que los administra el panel web para tomar/devolver control.
         """
         db = get_firestore_client()
         conv_ref = db.collection(COL).document(chat_id)
@@ -28,17 +30,11 @@ class ConversationRepo:
             "timestamp": firestore.SERVER_TIMESTAMP,
         })
 
-        # Actualizar / crear el documento padre
+        # Actualizar / crear el documento padre sin tocar flags de control admin.
         conv_ref.set(
             {
                 "lastMessage": content,
                 "lastMessageAt": firestore.SERVER_TIMESTAMP,
-                # Valores por defecto al crear — set con merge=True los respeta si ya existen
-                "userName": None,
-                "userPhone": None,
-                "isAdminMode": False,
-                "adminUid": None,
-                "needsHuman": False,
             },
             merge=True,
         )
