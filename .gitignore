@@ -142,8 +142,6 @@ firebase_conection.json
 
 # Environments
 .env
-.env.local
-.env.*
 .envrc
 .venv
 env/

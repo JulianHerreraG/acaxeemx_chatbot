@@ -1,6 +1,7 @@
 from app.schemas.action_schema import ModificarReserva
 from app.repositories.reservation_repo import reservation_repo
 from app.services.table_assignment_service import table_assignment_service
+from app.services.reservation_service import reservation_service
 from app.utils.config import Config
 from app.utils.datetime_helper import is_valid_reservation_hour, get_today_date_str
 from app.utils.logger import setup_logger
@@ -147,79 +148,46 @@ class ModificationService:
                 ),
             }
 
-        # Asignar mesa
-        assignment = table_assignment_service.assign(
+        result = reservation_service.create_split_or_single_reservation(
+            nombre=data.nombre_nuevo,
+            numero_personas=data.numero_personas_nuevo,
+            telefono=data.telefono_nuevo,
             fecha=data.fecha_nueva,
             hora=data.hora_nueva,
-            num_persons=data.numero_personas_nuevo,
+            source="chatbot",
+            notes="",
+            tags=[],
         )
 
-        if assignment is None:
-            day_avail = table_assignment_service.get_availability_for_date(data.fecha_nueva)
-            alt = self._build_alternatives(day_avail, data.numero_personas_nuevo, data.fecha_nueva)
+        if not result.get("exito"):
             return {
                 "exito": False,
-                "mensaje": (
-                    f"{prefix}"
-                    f"No hay mesas disponibles para {data.numero_personas_nuevo} persona(s) "
-                    f"el {data.fecha_nueva} a las {data.hora_nueva}.\n\n{alt}"
-                ),
+                "mensaje": f"{prefix}{result['mensaje']}",
             }
 
-        new_doc_id = reservation_repo.create({
-            "customerName": data.nombre_nuevo,
-            "partySize": data.numero_personas_nuevo,
-            "customerPhone": data.telefono_nuevo,
-            "date": data.fecha_nueva,
-            "time": data.hora_nueva,
-            "tableId": assignment["table_id"],
-            "zone": assignment["zone"],
-            "status": "confirmed",
-            "source": "chatbot",
-            "notes": "",
-            "tags": [],
-        })
-        logger.info(f"Modificacion: nueva reserva {new_doc_id} mesa {assignment['table_id']} creada ({data.fecha_nueva})")
-
         return {
-            "exito": True,
-            "mensaje": (
-                f"{prefix}"
-                f"Nueva reservacion confirmada en ACAXEEMX:\n"
-                f"Nombre: {data.nombre_nuevo}\n"
-                f"Fecha: {data.fecha_nueva}\n"
-                f"Hora: {data.hora_nueva}\n"
-                f"Personas: {data.numero_personas_nuevo}\n"
-                f"Telefono: {data.telefono_nuevo}\n"
-                f"Mesa: {assignment['table_id']} "
-                f"(Zona {assignment['zone']} - {assignment['zone_name']}, "
-                f"{assignment['seats']} sillas)."
-            ),
+            **result,
+            "mensaje": f"{prefix}{result['mensaje']}",
         }
 
     def _build_alternatives(self, day_avail: dict, num_persons: int, fecha: str) -> str:
         lines = []
         for hora, avail in day_avail.items():
-            seat_rules = avail["seat_rules"]
-            suitable = 0
-            for seats, count in avail["available_by_capacity"].items():
-                rule = seat_rules.get(str(seats))
-                if not rule:
-                    continue
-                if num_persons > seats or num_persons < rule["min_persons"]:
-                    continue
-                suitable += count
-            if suitable > 0:
-                lines.append(f"  {hora} — {suitable} mesa(s) disponible(s)")
+            if table_assignment_service.can_fit_party_in_availability(
+                num_persons,
+                avail["available_by_capacity"],
+                avail["seat_rules"],
+            ):
+                lines.append(f"  {hora}")
 
         if not lines:
             return (
-                f"No hay mesas disponibles para {num_persons} persona(s) "
+                f"No hay disponibilidad para {num_persons} persona(s) "
                 f"en ninguna hora del {fecha}."
             )
 
         return (
-            f"Horarios con mesa para {num_persons} persona(s) el {fecha}:\n"
+            f"Horarios disponibles para {num_persons} persona(s) el {fecha}:\n"
             + "\n".join(lines)
             + "\n\n¿Te gustaria reservar en alguno de estos horarios?"
         )

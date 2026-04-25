@@ -79,6 +79,21 @@ class Orchestrator:
         action_response.fecha_hora_actual.Hora = datetime_info["Hora"]
         action_response.fecha_hora_actual.fecha = datetime_info["fecha"]
 
+        # Paso 8.1: Escalar a asesor humano cuando el JSON lo solicite.
+        if action_response.solicitar_asistencia_admin.estado:
+            logger.info(f"Escalando conversacion {chat_id} a atencion humana")
+            final_message = (
+                action_response.solicitar_asistencia_admin.mensaje_para_usuario
+                or "Claro, te apoyo con un asesor para atenderlo mejor. En un momento te contactamos."
+            )
+            conversation_repo.mark_needs_human(
+                chat_id,
+                action_response.solicitar_asistencia_admin.motivo,
+            )
+            conversation_repo.save_turn(chat_id, "user", user_message)
+            conversation_repo.save_turn(chat_id, "assistant", final_message)
+            return final_message
+
         # Paso 9: Determinar y ejecutar accion
         action_result = None
 

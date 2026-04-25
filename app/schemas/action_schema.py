@@ -55,6 +55,12 @@ class ModificarReserva(BaseModel):
     mensaje_si_exitoso: Optional[str] = None
 
 
+class SolicitarAsistenciaAdmin(BaseModel):
+    estado: bool = False
+    motivo: Optional[str] = None
+    mensaje_para_usuario: Optional[str] = None
+
+
 class MensajeRespuestaDirecto(BaseModel):
     estado: bool = False
     mensaje: Optional[str] = None
@@ -67,6 +73,7 @@ class ActionResponse(BaseModel):
     consultar_disponibilidad: ConsultarDisponibilidad = ConsultarDisponibilidad()
     consultar_reserva: ConsultarReserva = ConsultarReserva()
     modificar_reserva: ModificarReserva = ModificarReserva()
+    solicitar_asistencia_admin: SolicitarAsistenciaAdmin = SolicitarAsistenciaAdmin()
     mensaje_respuesta_directo: MensajeRespuestaDirecto = MensajeRespuestaDirecto()
 
     @model_validator(mode="after")
