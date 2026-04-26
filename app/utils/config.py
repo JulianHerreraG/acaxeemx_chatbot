@@ -12,11 +12,6 @@ class Config:
     # Opcional (fallback LLM)
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-    # Obsoleto (RTDB). Se mantiene como opcional para no romper entornos
-    # que aun tengan la variable definida. Eliminable una vez confirmada la
-    # migracion a Firestore.
-    FIREBASE_DATABASE_URL = os.getenv("FIREBASE_DATABASE_URL", "")
-
     # Firebase credentials (JSON completo como string en variable de entorno)
     FIREBASE_CREDENTIALS_JSON = os.environ["FIREBASE_CREDENTIALS_JSON"]
     LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-6")
