@@ -10,35 +10,35 @@ COL = "conversations"
 
 class ConversationRepo:
 
-    def save_turn(self, chat_id: str, role: str, content: str) -> None:
+    def save_turn(self, chat_id: str, role: str, content: str, source: str | None = None) -> None:
         """
         Guarda un turno en la subcolleccion messages y actualiza el documento
         padre de la conversacion (lastMessage, lastMessageAt).
-        Si el documento padre no existe, lo crea con valores por defecto.
+
+        IMPORTANTE: no sobreescribir campos de control (isAdminMode/adminUid),
+        ya que los administra el panel web para tomar/devolver control.
         """
         db = get_firestore_client()
         conv_ref = db.collection(COL).document(chat_id)
         messages_ref = conv_ref.collection("messages")
+        resolved_source = source or ("llm" if role == "assistant" else "user")
 
         # Escribir el mensaje en la subcolleccion
         messages_ref.add({
             "role": role,
             "content": content,
-            "source": "llm" if role == "assistant" else "user",
+            "source": resolved_source,
             "timestamp": firestore.SERVER_TIMESTAMP,
         })
 
-        # Actualizar / crear el documento padre
+        # Actualizar / crear el documento padre sin tocar flags de control admin.
         conv_ref.set(
             {
                 "lastMessage": content,
                 "lastMessageAt": firestore.SERVER_TIMESTAMP,
-                # Valores por defecto al crear — set con merge=True los respeta si ya existen
-                "userName": None,
-                "userPhone": None,
-                "isAdminMode": False,
-                "adminUid": None,
-                "needsHuman": False,
+                "lastMessageRole": role,
+                "lastMessageSource": resolved_source,
+                "unreadByAdmin": role == "user",
             },
             merge=True,
         )
@@ -78,16 +78,20 @@ class ConversationRepo:
             return False
         return bool(doc.to_dict().get("isAdminMode", False))
 
-    def mark_needs_human(self, chat_id: str) -> None:
+    def mark_needs_human(self, chat_id: str, reason: str | None = None) -> None:
         """
         Marca que la conversacion requiere atencion de un asesor humano.
         El panel web lo mostrara como alerta en el monitor del bot.
         """
         db = get_firestore_client()
-        db.collection(COL).document(chat_id).set(
-            {"needsHuman": True},
-            merge=True,
-        )
+        payload = {
+            "needsHuman": True,
+            "needsHumanAt": firestore.SERVER_TIMESTAMP,
+        }
+        if reason:
+            payload["needsHumanReason"] = reason
+
+        db.collection(COL).document(chat_id).set(payload, merge=True)
         logger.info(f"Conversacion {chat_id} marcada como needsHuman=True")
 
     def delete_all_for_date(self, date_str: str) -> None:

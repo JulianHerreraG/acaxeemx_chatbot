@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from app.schemas.action_schema import Reserva
 from app.repositories.reservation_repo import reservation_repo
 from app.services.table_assignment_service import table_assignment_service
@@ -28,58 +30,148 @@ class ReservationService:
                 ),
             }
 
-        # Asignar mesa
-        assignment = table_assignment_service.assign(
+        return self.create_split_or_single_reservation(
+            nombre=data.nombre,
+            numero_personas=data.numero_personas,
+            telefono=data.telefono,
             fecha=data.fecha,
             hora=data.hora,
-            num_persons=data.numero_personas,
+            source="chatbot",
+            notes="",
+            tags=[],
         )
 
-        if assignment is None:
-            # Sin mesa disponible — construir alternativas
-            day_avail = table_assignment_service.get_availability_for_date(data.fecha)
-            alternatives = self._build_alternatives(
-                day_avail, data.numero_personas, data.fecha, data.hora,
+    def create_split_or_single_reservation(
+        self,
+        *,
+        nombre: str,
+        numero_personas: int,
+        telefono: str,
+        fecha: str,
+        hora: str,
+        source: str,
+        notes: str,
+        tags: list[str],
+    ) -> dict:
+        """
+        Crea una reservacion simple o, si el grupo supera 10 personas,
+        la divide automaticamente en varias mesas ligadas entre si.
+        """
+        if numero_personas <= 10:
+            assignment = table_assignment_service.assign(
+                fecha=fecha,
+                hora=hora,
+                num_persons=numero_personas,
             )
-            logger.info(f"Sin disponibilidad para {data.numero_personas} personas: {data.fecha} {data.hora}")
+
+            if assignment is None:
+                day_avail = table_assignment_service.get_availability_for_date(fecha)
+                alternatives = self._build_alternatives(
+                    day_avail, numero_personas, fecha, hora,
+                )
+                logger.info(f"Sin disponibilidad para {numero_personas} personas: {fecha} {hora}")
+                return {
+                    "exito": False,
+                    "mensaje": (
+                        f"No hay disponibilidad para {numero_personas} persona(s) "
+                        f"el {fecha} a las {hora}.\n\n"
+                        f"{alternatives}"
+                    ),
+                }
+
+            doc_id = reservation_repo.create({
+                "customerName": nombre,
+                "partySize": numero_personas,
+                "customerPhone": telefono,
+                "date": fecha,
+                "time": hora,
+                "tableId": assignment["table_id"],
+                "zone": assignment["zone"],
+                "status": "confirmed",
+                "source": source,
+                "notes": notes,
+                "tags": tags,
+            })
+
+            logger.info(f"Reserva creada: {doc_id} mesa {assignment['table_id']} para {nombre}")
+            return {
+                "exito": True,
+                "mensaje": (
+                    f"Reserva creada exitosamente en ACAXEEMX. "
+                    f"Nombre: {nombre}, "
+                    f"Fecha: {fecha}, "
+                    f"Hora: {hora}, "
+                    f"Personas: {numero_personas}, "
+                    f"Telefono: {telefono}, "
+                    f"Mesa: {assignment['table_id']} "
+                    f"(Zona {assignment['zone']} - {assignment['zone_name']}, "
+                    f"{assignment['seats']} sillas)."
+                ),
+            }
+
+        group_plan = table_assignment_service.assign_group(
+            fecha=fecha,
+            hora=hora,
+            num_persons=numero_personas,
+        )
+
+        if group_plan is None:
+            day_avail = table_assignment_service.get_availability_for_date(fecha)
+            alternatives = self._build_alternatives(
+                day_avail, numero_personas, fecha, hora,
+            )
+            logger.info(f"Sin disponibilidad grupal para {numero_personas} personas: {fecha} {hora}")
             return {
                 "exito": False,
                 "mensaje": (
-                    f"No hay mesas disponibles para {data.numero_personas} persona(s) "
-                    f"el {data.fecha} a las {data.hora}.\n\n"
+                    f"No hay disponibilidad para un grupo de {numero_personas} personas "
+                    f"el {fecha} a las {hora}.\n\n"
                     f"{alternatives}"
                 ),
             }
 
-        # Crear reservacion con schema ADR 0003
-        doc_id = reservation_repo.create({
-            "customerName": data.nombre,
-            "partySize": data.numero_personas,
-            "customerPhone": data.telefono,
-            "date": data.fecha,
-            "time": data.hora,
-            "tableId": assignment["table_id"],
-            "zone": assignment["zone"],
-            "status": "confirmed",
-            "source": "chatbot",
-            "notes": "",
-            "tags": [],
-        })
+        group_id = f"grp_{uuid4().hex[:10]}"
+        doc_ids: list[str] = []
+        for index, assignment in enumerate(group_plan, start=1):
+            doc_id = reservation_repo.create({
+                "customerName": nombre,
+                "partySize": assignment["assigned_people"],
+                "customerPhone": telefono,
+                "date": fecha,
+                "time": hora,
+                "tableId": assignment["table_id"],
+                "zone": assignment["zone"],
+                "status": "confirmed",
+                "source": source,
+                "notes": (
+                    f"Reserva grupal de {numero_personas} personas · segmento {index}/{len(group_plan)}"
+                ),
+                "tags": [*tags, "grupo", f"group:{group_id}"],
+                "groupId": group_id,
+                "groupTotalPartySize": numero_personas,
+                "groupSplitIndex": index,
+                "groupSplitCount": len(group_plan),
+            })
+            doc_ids.append(doc_id)
 
-        logger.info(f"Reserva creada: {doc_id} mesa {assignment['table_id']} para {data.nombre}")
+        mesas = ", ".join(
+            f"Mesa {assignment['table_id']} ({assignment['assigned_people']} personas)"
+            for assignment in group_plan
+        )
+        logger.info(
+            f"Reserva grupal creada: {group_id} para {nombre} ({numero_personas} personas)"
+        )
         return {
             "exito": True,
+            "grouped_assignment": True,
             "mensaje": (
-                f"Reserva creada exitosamente en ACAXEEMX. "
-                f"Nombre: {data.nombre}, "
-                f"Fecha: {data.fecha}, "
-                f"Hora: {data.hora}, "
-                f"Personas: {data.numero_personas}, "
-                f"Telefono: {data.telefono}, "
-                f"Mesa: {assignment['table_id']} "
-                f"(Zona {assignment['zone']} - {assignment['zone_name']}, "
-                f"{assignment['seats']} sillas)."
+                f"Reserva grupal creada exitosamente en ACAXEEMX. "
+                f"Nombre: {nombre}, Fecha: {fecha}, Hora: {hora}, "
+                f"Personas totales: {numero_personas}, Telefono: {telefono}. "
+                f"Se asignaron {len(group_plan)} mesas dentro de la misma reserva: {mesas}."
             ),
+            "doc_ids": doc_ids,
+            "group_id": group_id,
         }
 
     def _build_alternatives(
@@ -90,26 +182,21 @@ class ReservationService:
         for hora, avail in day_avail.items():
             if hora == hora_solicitada:
                 continue
-            seat_rules = avail["seat_rules"]
-            suitable = 0
-            for seats, count in avail["available_by_capacity"].items():
-                rule = seat_rules.get(str(seats))
-                if not rule:
-                    continue
-                if num_persons > seats or num_persons < rule["min_persons"]:
-                    continue
-                suitable += count
-            if suitable > 0:
-                lines.append(f"  {hora} — {suitable} mesa(s) disponible(s)")
+            if table_assignment_service.can_fit_party_in_availability(
+                num_persons,
+                avail["available_by_capacity"],
+                avail["seat_rules"],
+            ):
+                lines.append(f"  {hora}")
 
         if not lines:
             return (
-                f"No hay mesas disponibles para {num_persons} persona(s) "
+                f"No hay disponibilidad para {num_persons} persona(s) "
                 f"en ninguna hora del {fecha}."
             )
 
         return (
-            f"Horarios con mesa para {num_persons} persona(s) el {fecha}:\n"
+            f"Horarios disponibles para {num_persons} persona(s) el {fecha}:\n"
             + "\n".join(lines)
             + "\n\n¿Te gustaria reservar en alguno de estos horarios?"
         )

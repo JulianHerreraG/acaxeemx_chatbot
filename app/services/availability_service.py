@@ -30,7 +30,7 @@ class AvailabilityService:
             return {
                 "exito": True,
                 "mensaje": (
-                    f"No hay servicio a las {data.hora}. {HORARIO_MSG}\n\n"
+                    f"A esa hora ya no estamos tomando reservaciones. {HORARIO_MSG}\n\n"
                     f"{day_info}"
                 ),
             }
@@ -44,7 +44,7 @@ class AvailabilityService:
                 return {
                     "exito": True,
                     "mensaje": (
-                        f"Las {data.hora} ya pasaron hoy. "
+                        f"Esa hora ya pasó hoy. "
                         f"Aquí la disponibilidad para el resto del día:\n\n"
                         f"{day_info}"
                     ),
@@ -61,18 +61,15 @@ class AvailabilityService:
             return {
                 "exito": True,
                 "mensaje": (
-                    f"No hay mesas disponibles el {data.fecha} a las {data.hora}.\n\n"
+                    f"En ese horario ya no tenemos disponibilidad.\n\n"
                     f"{day_info}"
                 ),
             }
 
-        cap_detail = self._format_capacity(avail["available_by_capacity"], avail["seat_rules"])
         return {
             "exito": True,
             "mensaje": (
-                f"Disponibilidad para el {data.fecha} a las {data.hora}:\n"
-                f"{avail['available']} mesas disponibles de {avail['total_tables']} totales.\n\n"
-                f"{cap_detail}\n\n"
+                f"Sí, sí tenemos disponibilidad el {data.fecha} a las {data.hora}.\n\n"
                 f"¿Para cuantas personas te gustaria reservar?"
             ),
         }
@@ -89,12 +86,21 @@ class AvailabilityService:
                 continue
             suitable_count += count
 
-        if suitable_count > 0:
+        if data.numero_personas > 10:
+            has_group_capacity = table_assignment_service.can_fit_party_in_availability(
+                data.numero_personas,
+                avail["available_by_capacity"],
+                seat_rules,
+            )
+        else:
+            has_group_capacity = suitable_count > 0
+
+        if has_group_capacity:
             return {
                 "exito": True,
                 "mensaje": (
-                    f"Hay {suitable_count} mesa(s) disponible(s) para "
-                    f"{data.numero_personas} persona(s) el {data.fecha} a las {data.hora}."
+                    f"Sí, sí tenemos disponibilidad para {data.numero_personas} persona(s) "
+                    f"el {data.fecha} a las {data.hora}."
                 ),
             }
 
@@ -103,7 +109,7 @@ class AvailabilityService:
         return {
             "exito": True,
             "mensaje": (
-                f"No hay mesas disponibles para {data.numero_personas} persona(s) "
+                f"En ese horario no tenemos disponibilidad para {data.numero_personas} persona(s). "
                 f"el {data.fecha} a las {data.hora}.\n\n"
                 f"{day_info}"
             ),
@@ -115,7 +121,7 @@ class AvailabilityService:
         return {
             "exito": True,
             "mensaje": (
-                f"Disponibilidad para el {data.fecha}:\n\n"
+                f"Esto es lo que tenemos disponible el {data.fecha}:\n\n"
                 f"{day_info}"
             ),
         }
@@ -136,44 +142,29 @@ class AvailabilityService:
         lines = []
         for hora, avail in all_hours.items():
             if num_persons:
-                # Filtrar mesas donde quepa el grupo
-                seat_rules = avail["seat_rules"]
-                suitable = 0
-                for seats, count in avail["available_by_capacity"].items():
-                    rule = seat_rules.get(str(seats))
-                    if not rule:
-                        continue
-                    if num_persons > seats or num_persons < rule["min_persons"]:
-                        continue
-                    suitable += count
-                if suitable > 0:
-                    lines.append(f"  {hora} — {suitable} mesa(s) disponible(s)")
+                if table_assignment_service.can_fit_party_in_availability(
+                    num_persons,
+                    avail["available_by_capacity"],
+                    avail["seat_rules"],
+                ):
+                    lines.append(f"  {hora}")
             else:
                 if avail["available"] > 0:
-                    lines.append(f"  {hora} — {avail['available']} mesa(s) disponible(s)")
+                    lines.append(f"  {hora}")
 
         if not lines:
             if num_persons:
                 return (
-                    f"No hay mesas disponibles para {num_persons} persona(s) "
+                    f"No encontramos disponibilidad para {num_persons} persona(s) "
                     f"en ninguna hora del {fecha}."
                 )
             return f"No hay mesas disponibles en ninguna hora del {fecha}."
 
         header = f"Horarios con disponibilidad el {fecha}:"
         if num_persons:
-            header = f"Horarios con mesa para {num_persons} persona(s) el {fecha}:"
+            header = f"Horarios disponibles para {num_persons} persona(s) el {fecha}:"
 
         return header + "\n" + "\n".join(lines) + "\n\n¿Te gustaria reservar en alguno de estos horarios?"
-
-    def _format_capacity(self, available_by_cap: dict, seat_rules: dict) -> str:
-        """Formatea detalle de mesas disponibles por capacidad."""
-        lines = []
-        for seats, count in available_by_cap.items():
-            rule = seat_rules.get(str(seats), {})
-            min_p = rule.get("min_persons", 1)
-            lines.append(f"  Mesa de {seats} sillas ({min_p}-{seats} personas): {count} disponible(s)")
-        return "Detalle de mesas:\n" + "\n".join(lines)
 
 
 availability_service = AvailabilityService()
