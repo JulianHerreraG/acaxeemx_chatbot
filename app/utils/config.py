@@ -32,3 +32,13 @@ class Config:
     # Ventana de ocupación por reserva (minutos). Dos reservas en la misma
     # mesa tienen conflicto si |T_nueva - T_existente| < MIN_STAY_MINUTES.
     MIN_STAY_MINUTES = int(os.getenv("MIN_STAY_MINUTES", "59"))
+
+    # Webhooks — canales externos
+    # URL pública HTTPS del bot (sin trailing slash). Ej: https://acaxee-bot.onrender.com
+    TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL", "")
+    # Token secreto opcional para verificar que los requests de Telegram son legítimos
+    TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+    # Token de verificación compartido para el handshake de Meta (Instagram y WhatsApp)
+    META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN", "")
+    # Page Access Token de Instagram para enviar mensajes por la Messaging API
+    INSTAGRAM_PAGE_ACCESS_TOKEN = os.getenv("INSTAGRAM_PAGE_ACCESS_TOKEN", "")

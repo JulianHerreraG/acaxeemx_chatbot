@@ -20,37 +20,43 @@ class Orchestrator:
     def __init__(self):
         self.llm_client = LLMClient()
 
-    def process_message(self, chat_id: str, user_message: str) -> str | None:
+    def process_message(self, platform: str, channel_id: str, user_message: str) -> str | None:
         """
         Procesa un mensaje del usuario y retorna la respuesta del bot.
         Retorna None si la conversacion esta en modo admin (bot silenciado).
+
+        platform: 'telegram' | 'instagram' | 'whatsapp'
+        channel_id: ID unico del canal (chat_id de Telegram, PSID de Instagram, phone de WhatsApp)
         """
         try:
-            return self._process(chat_id, user_message)
+            return self._process(platform, channel_id, user_message)
         except Exception as e:
-            logger.error(f"Error procesando mensaje de {chat_id}: {e}", exc_info=True)
+            conversation_key = f"{platform}_{channel_id}"
+            logger.error(f"Error procesando mensaje de {conversation_key}: {e}", exc_info=True)
             return FALLBACK_MESSAGE
 
-    def _process(self, chat_id: str, user_message: str) -> str | None:
+    def _process(self, platform: str, channel_id: str, user_message: str) -> str | None:
+        conversation_key = f"{platform}_{channel_id}"
+
         # Paso 1: Obtener fecha/hora actual
         datetime_info = get_current_datetime()
-        logger.info(f"Procesando mensaje de {chat_id}: {user_message[:50]}...")
+        logger.info(f"Procesando mensaje de {conversation_key}: {user_message[:50]}...")
 
         # Paso 2: Verificar modo admin — si esta activo, guardar el mensaje
         # en Firestore para el monitor y silenciar el bot.
-        if conversation_repo.is_admin_mode(chat_id):
-            logger.info(f"Conversacion {chat_id} en modo admin — mensaje guardado, bot silenciado")
-            conversation_repo.save_turn(chat_id, "user", user_message)
+        if conversation_repo.is_admin_mode(conversation_key):
+            logger.info(f"Conversacion {conversation_key} en modo admin — mensaje guardado, bot silenciado")
+            conversation_repo.save_turn(conversation_key, "user", user_message)
             return None
 
         # Paso 3: Cargar historial de conversacion
-        history = conversation_repo.get_history(chat_id)
+        history = conversation_repo.get_history(conversation_key)
 
         # Paso 4: Verificar si es mensaje de cierre post-confirmacion
         closure_response = self._try_closure(user_message, history)
         if closure_response:
-            conversation_repo.save_turn(chat_id, "user", user_message)
-            conversation_repo.save_turn(chat_id, "assistant", closure_response)
+            conversation_repo.save_turn(conversation_key, "user", user_message)
+            conversation_repo.save_turn(conversation_key, "assistant", closure_response)
             return closure_response
 
         # Paso 5: Construir mensajes para el LLM principal
@@ -66,13 +72,13 @@ class Orchestrator:
         # Paso 6: Primera pasada - llamar al LLM
         raw_response = self._call_llm_with_retry(messages)
         if raw_response is None:
-            conversation_repo.mark_needs_human(chat_id)
+            conversation_repo.mark_needs_human(conversation_key)
             return FALLBACK_MESSAGE
 
         # Paso 7: Parsear y validar JSON
         action_response = self._parse_with_retry(raw_response, messages)
         if action_response is None:
-            conversation_repo.mark_needs_human(chat_id)
+            conversation_repo.mark_needs_human(conversation_key)
             return FALLBACK_MESSAGE
 
         # Paso 8: Sobreescribir fecha_hora_actual con valores del sistema
@@ -81,17 +87,17 @@ class Orchestrator:
 
         # Paso 8.1: Escalar a asesor humano cuando el JSON lo solicite.
         if action_response.solicitar_asistencia_admin.estado:
-            logger.info(f"Escalando conversacion {chat_id} a atencion humana")
+            logger.info(f"Escalando conversacion {conversation_key} a atencion humana")
             final_message = (
                 action_response.solicitar_asistencia_admin.mensaje_para_usuario
                 or "Claro, te apoyo con un asesor para atenderlo mejor. En un momento te contactamos."
             )
             conversation_repo.mark_needs_human(
-                chat_id,
+                conversation_key,
                 action_response.solicitar_asistencia_admin.motivo,
             )
-            conversation_repo.save_turn(chat_id, "user", user_message)
-            conversation_repo.save_turn(chat_id, "assistant", final_message)
+            conversation_repo.save_turn(conversation_key, "user", user_message)
+            conversation_repo.save_turn(conversation_key, "assistant", final_message)
             return final_message
 
         # Paso 9: Determinar y ejecutar accion
@@ -131,14 +137,14 @@ class Orchestrator:
 
         # Si despues de todo no hay respuesta, marcar needsHuman
         if not final_message:
-            conversation_repo.mark_needs_human(chat_id)
+            conversation_repo.mark_needs_human(conversation_key)
             final_message = FALLBACK_MESSAGE
 
         # Paso 11: Guardar turno en historial
-        conversation_repo.save_turn(chat_id, "user", user_message)
-        conversation_repo.save_turn(chat_id, "assistant", final_message)
+        conversation_repo.save_turn(conversation_key, "user", user_message)
+        conversation_repo.save_turn(conversation_key, "assistant", final_message)
 
-        logger.info(f"Respuesta para {chat_id}: {final_message[:50]}...")
+        logger.info(f"Respuesta para {conversation_key}: {final_message[:50]}...")
         return final_message
 
     def _resolve_action_result(

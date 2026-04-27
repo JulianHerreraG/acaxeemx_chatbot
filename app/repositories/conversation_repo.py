@@ -10,16 +10,19 @@ COL = "conversations"
 
 class ConversationRepo:
 
-    def save_turn(self, chat_id: str, role: str, content: str, source: str | None = None) -> None:
+    def save_turn(self, conversation_key: str, role: str, content: str, source: str | None = None) -> None:
         """
         Guarda un turno en la subcolleccion messages y actualiza el documento
         padre de la conversacion (lastMessage, lastMessageAt).
+
+        conversation_key: clave unica de la conversacion — formato '{platform}_{channel_id}'
+          ej. 'telegram_123456789', 'instagram_987654321'
 
         IMPORTANTE: no sobreescribir campos de control (isAdminMode/adminUid),
         ya que los administra el panel web para tomar/devolver control.
         """
         db = get_firestore_client()
-        conv_ref = db.collection(COL).document(chat_id)
+        conv_ref = db.collection(COL).document(conversation_key)
         messages_ref = conv_ref.collection("messages")
         resolved_source = source or ("llm" if role == "assistant" else "user")
 
@@ -42,9 +45,9 @@ class ConversationRepo:
             },
             merge=True,
         )
-        logger.debug(f"Turno guardado: chat={chat_id}, role={role}")
+        logger.debug(f"Turno guardado: key={conversation_key}, role={role}")
 
-    def get_history(self, chat_id: str) -> list[dict]:
+    def get_history(self, conversation_key: str) -> list[dict]:
         """
         Retorna el historial de la conversacion como lista de {role, content}.
         Limitado a MAX_CONVERSATION_HISTORY mensajes mas recientes.
@@ -52,10 +55,9 @@ class ConversationRepo:
         db = get_firestore_client()
         messages_ref = (
             db.collection(COL)
-            .document(chat_id)
+            .document(conversation_key)
             .collection("messages")
         )
-        # Ordenar por timestamp; limitar a MAX*2 para tener margen antes de truncar
         docs = (
             messages_ref
             .order_by("timestamp")
@@ -67,18 +69,18 @@ class ConversationRepo:
             for doc in docs
         ]
 
-    def is_admin_mode(self, chat_id: str) -> bool:
+    def is_admin_mode(self, conversation_key: str) -> bool:
         """
         Retorna True si la conversacion esta en modo admin (bot silenciado).
         Si el documento no existe, retorna False.
         """
         db = get_firestore_client()
-        doc = db.collection(COL).document(chat_id).get()
+        doc = db.collection(COL).document(conversation_key).get()
         if not doc.exists:
             return False
         return bool(doc.to_dict().get("isAdminMode", False))
 
-    def mark_needs_human(self, chat_id: str, reason: str | None = None) -> None:
+    def mark_needs_human(self, conversation_key: str, reason: str | None = None) -> None:
         """
         Marca que la conversacion requiere atencion de un asesor humano.
         El panel web lo mostrara como alerta en el monitor del bot.
@@ -91,8 +93,8 @@ class ConversationRepo:
         if reason:
             payload["needsHumanReason"] = reason
 
-        db.collection(COL).document(chat_id).set(payload, merge=True)
-        logger.info(f"Conversacion {chat_id} marcada como needsHuman=True")
+        db.collection(COL).document(conversation_key).set(payload, merge=True)
+        logger.info(f"Conversacion {conversation_key} marcada como needsHuman=True")
 
     def delete_all_for_date(self, date_str: str) -> None:
         """
@@ -113,10 +115,8 @@ class ConversationRepo:
         for conv in conversations:
             data = conv.to_dict()
             last_at = data.get("lastMessageAt")
-            # Saltear conversaciones sin actividad registrada o recientes
             if last_at is None:
                 continue
-            # Firestore timestamps son objetos con atributo .replace()
             try:
                 last_dt = last_at.astimezone(tz) if hasattr(last_at, "astimezone") else None
             except Exception:
@@ -125,7 +125,6 @@ class ConversationRepo:
             if last_dt is None or last_dt >= cutoff:
                 continue
 
-            # Borrar mensajes de esta conversacion vieja
             msgs_ref = db.collection(COL).document(conv.id).collection("messages")
             old_msgs = list(msgs_ref.stream())
             if not old_msgs:

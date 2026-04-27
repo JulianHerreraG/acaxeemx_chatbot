@@ -15,6 +15,7 @@ class Reserva(BaseModel):
     fecha: Optional[str] = None
     hora: Optional[str] = None
     mensaje_si_exitoso: Optional[str] = None
+    occasion_signals: list[str] = []
 
 
 class CancelarReserva(BaseModel):
