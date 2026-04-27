@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from app.schemas.action_schema import Reserva
 from app.repositories.reservation_repo import reservation_repo
+from app.repositories.channel_index_repo import channel_index_repo
 from app.services.table_assignment_service import table_assignment_service
 from app.utils.datetime_helper import is_valid_reservation_hour
 from app.utils.logger import setup_logger
@@ -15,9 +16,12 @@ HORARIO_MSG = (
 
 
 class ReservationService:
-    def create_reservation(self, data: Reserva) -> dict:
+    def create_reservation(
+        self, data: Reserva, platform: str = "", channel_id: str = ""
+    ) -> dict:
         """
         Retorna {exito: bool, mensaje: str}.
+        platform y channel_id permiten registrar el canal de origen (C6, ADR 0007).
         """
         # Validar horario
         if not is_valid_reservation_hour(data.hora):
@@ -30,6 +34,10 @@ class ReservationService:
                 ),
             }
 
+        # Registrar teléfono pendiente en channel_index (Telegram/Instagram no verificados)
+        if platform in ("telegram", "instagram") and data.telefono:
+            channel_index_repo.set_pending_phone(platform, channel_id, data.telefono)
+
         return self.create_split_or_single_reservation(
             nombre=data.nombre,
             numero_personas=data.numero_personas,
@@ -39,6 +47,9 @@ class ReservationService:
             source="chatbot",
             notes="",
             tags=[],
+            source_channel=platform,
+            source_channel_id=channel_id,
+            occasion_signals=data.occasion_signals,
         )
 
     def create_split_or_single_reservation(
@@ -52,6 +63,9 @@ class ReservationService:
         source: str,
         notes: str,
         tags: list[str],
+        source_channel: str = "",
+        source_channel_id: str = "",
+        occasion_signals: list[str] = [],
     ) -> dict:
         """
         Crea una reservacion simple o, si el grupo supera 10 personas,
@@ -91,6 +105,9 @@ class ReservationService:
                 "source": source,
                 "notes": notes,
                 "tags": tags,
+                "sourceChannel": source_channel,
+                "sourceChannelId": source_channel_id,
+                "occasionSignals": occasion_signals,
             })
 
             logger.info(f"Reserva creada: {doc_id} mesa {assignment['table_id']} para {nombre}")
@@ -151,6 +168,9 @@ class ReservationService:
                 "groupTotalPartySize": numero_personas,
                 "groupSplitIndex": index,
                 "groupSplitCount": len(group_plan),
+                "sourceChannel": source_channel,
+                "sourceChannelId": source_channel_id,
+                "occasionSignals": occasion_signals,
             })
             doc_ids.append(doc_id)
 

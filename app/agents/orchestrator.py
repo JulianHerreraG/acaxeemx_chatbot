@@ -6,6 +6,7 @@ from app.utils.config import Config
 from app.utils.logger import setup_logger
 from app.repositories.conversation_repo import conversation_repo
 from app.services.identity_service import identity_service
+from app.services.customer_context_service import customer_context_service
 from app.services.reservation_service import reservation_service
 from app.services.cancellation_service import cancellation_service
 from app.services.availability_service import availability_service
@@ -64,11 +65,14 @@ class Orchestrator:
             return closure_response
 
         # Paso 5: Construir mensajes para el LLM principal
+        context_block = customer_context_service.get_context_block(platform, channel_id)
         system_msg = SYSTEM_PROMPT.format(
             restaurant_name=Config.RESTAURANT_NAME,
             hora_actual=datetime_info["Hora"],
             fecha_actual=datetime_info["fecha"],
         )
+        if context_block:
+            system_msg = context_block + "\n" + system_msg
         messages = [{"role": "system", "content": system_msg}]
         messages.extend(history)
         messages.append({"role": "user", "content": user_message})
@@ -109,7 +113,9 @@ class Orchestrator:
 
         if action_response.reserva.estado:
             logger.info("Ejecutando: crear reserva")
-            action_result = reservation_service.create_reservation(action_response.reserva)
+            action_result = reservation_service.create_reservation(
+                action_response.reserva, platform=platform, channel_id=channel_id
+            )
 
         elif action_response.cancelar_reserva.estado:
             logger.info("Ejecutando: cancelar reserva")
