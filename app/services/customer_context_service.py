@@ -57,9 +57,9 @@ class CustomerContextService:
                 return ""
 
             name = customer.get("name", "")
-            channels = _format_list(customer.get("connected_channels", []))
-            visit_count = customer.get("visit_count", 0)
-            tables = _format_tables(customer.get("actual_tables", []))
+            channels = _format_list(customer.get("connectedChannels", []))
+            visit_count = customer.get("visitCount", 0)
+            tables = _format_tables(customer.get("actualTables", []))
             allergies = _format_list(customer.get("allergies", []))
             preferences = _format_list(customer.get("preferences", []))
             notes = _format_list(customer.get("notes", []))

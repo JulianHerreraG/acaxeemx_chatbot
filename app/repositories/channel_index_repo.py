@@ -33,12 +33,12 @@ class ChannelIndexRepo:
             return
         ref.set({
             "platform": platform,
-            "channel_id": channel_id,
+            "channelId": channel_id,
             "phone": None,
-            "pending_phone": None,
+            "pendingPhone": None,
             "verified": False,
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "verified_at": None,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "verifiedAt": None,
         })
         logger.info(f"channel_index creado (no verificado): {platform}_{channel_id}")
 
@@ -56,12 +56,12 @@ class ChannelIndexRepo:
             return
         ref.set({
             "platform": platform,
-            "channel_id": channel_id,
+            "channelId": channel_id,
             "phone": phone,
-            "pending_phone": None,
+            "pendingPhone": None,
             "verified": True,
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "verified_at": firestore.SERVER_TIMESTAMP,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "verifiedAt": firestore.SERVER_TIMESTAMP,
         })
         logger.info(f"channel_index creado (verificado): {platform}_{channel_id} → {phone}")
 
@@ -82,7 +82,7 @@ class ChannelIndexRepo:
             return
         if doc.to_dict().get("verified"):
             return
-        ref.update({"pending_phone": phone})
+        ref.update({"pendingPhone": phone})
         logger.info(f"pending_phone registrado: {platform}_{channel_id} → {phone}")
 
 

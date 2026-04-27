@@ -9,8 +9,8 @@ COL = "customers"
 # Campos de lista de IDs por canal (append-only, según ADR 0006).
 # WhatsApp no tiene lista propia: su channel_id ES el teléfono (doc ID).
 _CHANNEL_IDS_FIELD = {
-    "telegram": "telegram_ids",
-    "instagram": "instagram_ids",
+    "telegram": "telegramIds",
+    "instagram": "instagramIds",
 }
 
 
@@ -47,16 +47,16 @@ class CustomerRepo:
             data = {
                 "phone": phone,
                 "name": name,
-                "connected_channels": [platform],
-                "telegram_ids": [],
-                "instagram_ids": [],
-                "visit_count": 0,
-                "actual_tables": [],
+                "connectedChannels": [platform],
+                "telegramIds": [],
+                "instagramIds": [],
+                "visitCount": 0,
+                "actualTables": [],
                 "allergies": [],
                 "preferences": [],
                 "notes": [],
-                "created_at": firestore.SERVER_TIMESTAMP,
-                "updated_at": firestore.SERVER_TIMESTAMP,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
             }
             if ids_field:
                 data[ids_field] = [channel_id]
@@ -65,8 +65,8 @@ class CustomerRepo:
         else:
             updates = {
                 "name": name,
-                "updated_at": firestore.SERVER_TIMESTAMP,
-                "connected_channels": firestore.ArrayUnion([platform]),
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+                "connectedChannels": firestore.ArrayUnion([platform]),
             }
             if ids_field:
                 updates[ids_field] = firestore.ArrayUnion([channel_id])
