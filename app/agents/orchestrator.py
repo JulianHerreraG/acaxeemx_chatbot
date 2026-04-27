@@ -5,6 +5,7 @@ from app.utils.json_parser import parse_llm_response, extract_json
 from app.utils.config import Config
 from app.utils.logger import setup_logger
 from app.repositories.conversation_repo import conversation_repo
+from app.services.identity_service import identity_service
 from app.services.reservation_service import reservation_service
 from app.services.cancellation_service import cancellation_service
 from app.services.availability_service import availability_service
@@ -37,6 +38,9 @@ class Orchestrator:
 
     def _process(self, platform: str, channel_id: str, user_message: str) -> str | None:
         conversation_key = f"{platform}_{channel_id}"
+
+        # Paso 0: Garantizar registro en channel_index (C4)
+        identity_service.ensure_channel(platform, channel_id)
 
         # Paso 1: Obtener fecha/hora actual
         datetime_info = get_current_datetime()
