@@ -3,6 +3,7 @@ from uuid import uuid4
 from app.schemas.action_schema import Reserva
 from app.repositories.reservation_repo import reservation_repo
 from app.repositories.channel_index_repo import channel_index_repo
+from app.repositories.restaurant_config_repo import restaurant_config_repo
 from app.services.table_assignment_service import table_assignment_service
 from app.utils.datetime_helper import is_valid_reservation_hour
 from app.utils.logger import setup_logger
@@ -31,6 +32,21 @@ class ReservationService:
                 "mensaje": (
                     f"No es posible hacer una reservacion a las {data.hora}. "
                     f"{HORARIO_MSG}"
+                ),
+            }
+
+        # Validar que la fecha no caiga en un cierre especial bloqueante
+        # (configurable desde el panel /settings, restaurant_config.closures).
+        # NOTE: el copy del rechazo deberia revisarlo el AIP para alinearlo
+        # con brand_voice.md.
+        blocked, reason = restaurant_config_repo.is_date_blocked(data.fecha)
+        if blocked:
+            logger.info(f"Fecha bloqueada por cierre ({reason}): {data.fecha}")
+            return {
+                "exito": False,
+                "mensaje": (
+                    f"¡Ay, qué pena! Ese día no estaremos abiertos por {reason}. "
+                    f"¿Quieres que veamos otra fecha?"
                 ),
             }
 

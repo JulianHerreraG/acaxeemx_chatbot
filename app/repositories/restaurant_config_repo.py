@@ -96,6 +96,38 @@ class RestaurantConfigRepo:
         self._load()
         return self._seat_rules
 
+    def get_active_closures(self) -> list[dict]:
+        """
+        Retorna la lista de cierres especiales que afectan al bot
+        (affectsBot=True). NO se cachea — se lee Firestore cada llamada porque
+        los cierres se editan dinamicamente desde el panel web (/settings).
+        El doc es chico (1 documento) asi que el costo de la lectura es trivial.
+        """
+        try:
+            db = get_firestore_client()
+            doc = db.collection("restaurant_config").document("settings").get()
+            if not doc.exists:
+                return []
+            closures = doc.to_dict().get("closures", []) or []
+            return [c for c in closures if c.get("affectsBot")]
+        except Exception as e:
+            logger.warning(f"No se pudo leer closures de restaurant_config: {e}")
+            return []
+
+    def is_date_blocked(self, date_str: str) -> tuple[bool, str | None]:
+        """
+        Verifica si una fecha (YYYY-MM-DD) esta dentro de algun cierre activo.
+        Retorna (True, motivo) si esta bloqueada; (False, None) si no.
+        """
+        if not date_str:
+            return False, None
+        for closure in self.get_active_closures():
+            start = closure.get("startDate", "")
+            end = closure.get("endDate", start)
+            if start and end and start <= date_str <= end:
+                return True, closure.get("reason", "cierre temporal")
+        return False, None
+
     def get_tables_for_party(self, num_persons: int) -> list[tuple[str, dict]]:
         """
         Retorna mesas donde el grupo cabe segun seat_rules:
