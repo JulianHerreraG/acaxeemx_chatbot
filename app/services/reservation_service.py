@@ -37,16 +37,14 @@ class ReservationService:
 
         # Validar que la fecha no caiga en un cierre especial bloqueante
         # (configurable desde el panel /settings, restaurant_config.closures).
-        # NOTE: el copy del rechazo deberia revisarlo el AIP para alinearlo
-        # con brand_voice.md.
         blocked, reason = restaurant_config_repo.is_date_blocked(data.fecha)
         if blocked:
             logger.info(f"Fecha bloqueada por cierre ({reason}): {data.fecha}")
             return {
                 "exito": False,
                 "mensaje": (
-                    f"¡Ay, qué pena! Ese día no estaremos abiertos por {reason}. "
-                    f"¿Quieres que veamos otra fecha?"
+                    f"Ese día estaremos cerrados 🙏 — {reason}. "
+                    f"¿Qué fecha sí te funciona?"
                 ),
             }
 
